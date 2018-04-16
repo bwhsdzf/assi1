@@ -74,9 +74,7 @@ public class Client {
 		
 		
 			
-		ClientSkeleton c = ClientSkeleton.getInstance(); 
-				
-			
+		ClientSkeleton c = ClientSkeleton.getInstance();
 		
 	}
 

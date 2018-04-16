@@ -21,6 +21,12 @@ public class ClientSkeleton extends Thread {
 	private static ClientSkeleton clientSolution;
 	private TextFrame textFrame;
 	
+//	private Socket serverSocket
+//	private DataOutputStream outStream;
+//	private DataInputStream inStream;
+//	private BufferedReader inReader;
+//	private PrintWriter outWriter;
+	
 
 	
 	public static ClientSkeleton getInstance(){
@@ -30,6 +36,8 @@ public class ClientSkeleton extends Thread {
 		return clientSolution;
 	}
 	
+	
+	//Create instance and create connection with the provided server info
 	public ClientSkeleton(){
 		
 		
@@ -56,6 +64,16 @@ public class ClientSkeleton extends Thread {
 	public void run(){
 
 	}
+	
+	
+	//Reconnect to other server with provided info, return true if
+	//create success
+	//private boolean reconnect(JSONObject response)
+	
+	
+	
+	//Used to check the integrity of the server response, true if consistent 
+	//private boolean checkMessageIntegrity(JSONObject response)
 
 	
 }

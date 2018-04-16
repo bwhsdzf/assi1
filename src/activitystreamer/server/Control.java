@@ -110,6 +110,8 @@ public class Control extends Thread {
 		listener.setTerm(true);
 	}
 	
+	
+	//Send server announce to other servers
 	public boolean doActivity(){
 		return false;
 	}
