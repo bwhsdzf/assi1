@@ -25,6 +25,8 @@ public class Connection extends Thread {
 	private Socket socket;
 	private boolean term=false;
 	
+//	private 
+	
 	Connection(Socket socket) throws IOException{
 		in = new DataInputStream(socket.getInputStream());
 	    out = new DataOutputStream(socket.getOutputStream());

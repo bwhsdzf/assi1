@@ -21,11 +21,12 @@ public class ClientSkeleton extends Thread {
 	private static ClientSkeleton clientSolution;
 	private TextFrame textFrame;
 	
-//	private Socket serverSocket
-//	private DataOutputStream outStream;
-//	private DataInputStream inStream;
-//	private BufferedReader inReader;
-//	private PrintWriter outWriter;
+	private Socket serverSocket;
+	private DataOutputStream outStream;
+	private DataInputStream inStream;
+	private BufferedReader inReader;
+	private PrintWriter outWriter;
+	private JSONParser parser;
 	
 
 	
@@ -38,31 +39,57 @@ public class ClientSkeleton extends Thread {
 	
 	
 	//Create instance and create connection with the provided server info
-	public ClientSkeleton(){
-		
+	public ClientSkeleton() {
+	    try {
+	        serverSocket = new Socket(Settings.getRemoteHostname(), Settings.getRemotePort());
+		    inStream = new DataInputStream(serverSocket.getInputStream());
+		    outStream = new DataOutputStream(serverSocket.getOutputStream());
+		    inReader = new BufferedReader( new InputStreamReader(inStream));
+		    outWriter = new PrintWriter(outStream, true);
+	    }
+	    catch (IOException e) {
+	        System.out.println(e);
+	    }
+		parser = new JSONParser();
 		
 		textFrame = new TextFrame();
 		start();
 	}
 	
 	
-	
-	
-	
-	
 	@SuppressWarnings("unchecked")
 	public void sendActivityObject(JSONObject activityObj){
-		
+		outWriter.print(activityObj);
+		outWriter.flush();
 	}
 	
 	
 	public void disconnect(){
+		try {
+			inReader.close();
+			outWriter.close();
+		} catch (IOException e) {
+			log.error("error closing socket: " + e);
+		}
 		
 	}
 	
-	
+	//Process all incoming message from server
 	public void run(){
-
+		try {
+			JSONObject json;
+			String data;
+			while((data = inReader.readLine())!=null){
+				try {
+					json = (JSONObject) parser.parse(data);
+					textFrame.setOutputText(json);
+				} catch (ParseException pe) {
+					log.error("error in parsing string :"+pe);
+				}
+			}
+		} catch (IOException e) {
+			log.error("connection closed with exception: "+e);
+		}
 	}
 	
 	

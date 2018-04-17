@@ -6,6 +6,7 @@ import java.util.ArrayList;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.json.simple.JSONObject;
 
 import activitystreamer.util.Settings;
 
@@ -14,6 +15,8 @@ public class Control extends Thread {
 	private static ArrayList<Connection> connections;
 	private static boolean term=false;
 	private static Listener listener;
+	
+	private static Database database;
 	
 	protected static Control control = null;
 	
@@ -27,6 +30,7 @@ public class Control extends Thread {
 	public Control() {
 		// initialize the connections array
 		connections = new ArrayList<Connection>();
+		database = new Database();
 		// start a listener
 		try {
 			listener = new Listener();
@@ -53,6 +57,10 @@ public class Control extends Thread {
 	 * Return true if the connection should close.
 	 */
 	public synchronized boolean process(Connection con,String msg){
+//		JSONObject request;
+//		try {
+//			
+//		}
 		return true;
 	}
 	
