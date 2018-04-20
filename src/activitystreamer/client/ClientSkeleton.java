@@ -27,6 +27,7 @@ public class ClientSkeleton extends Thread {
 	private BufferedReader inReader;
 	private PrintWriter outWriter;
 	private JSONParser parser;
+	private InputListener inListener;
 	
 
 	
@@ -53,6 +54,7 @@ public class ClientSkeleton extends Thread {
 		parser = new JSONParser();
 		
 		textFrame = new TextFrame();
+		inListener = new InputListener();
 		start();
 	}
 	
@@ -83,6 +85,7 @@ public class ClientSkeleton extends Thread {
 				try {
 					json = (JSONObject) parser.parse(data);
 					textFrame.setOutputText(json);
+					System.out.println(data);
 				} catch (ParseException pe) {
 					log.error("error in parsing string :"+pe);
 				}
