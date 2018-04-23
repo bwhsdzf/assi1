@@ -61,7 +61,7 @@ public class Control extends Thread {
 //		try {
 //			
 //		}
-		return true;
+		return false;
 	}
 	
 	/*

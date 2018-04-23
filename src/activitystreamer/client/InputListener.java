@@ -11,6 +11,7 @@ public class InputListener extends Thread{
 	
 	public InputListener() {
 		sc = new Scanner(System.in);
+		start();
 		
 	}
 	
