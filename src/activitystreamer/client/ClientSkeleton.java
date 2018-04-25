@@ -84,11 +84,11 @@ public class ClientSkeleton extends Thread {
 	@SuppressWarnings("unchecked")
 	public void sendActivityObject(JSONObject activityObj){
 		outWriter.println(activityObj);
-		System.out.println("Message sent");
+		//System.out.println("Message sent");
 	}
 	
-	private void createConnection(String remoteHose, int remotePort) throws UnknownHostException, IOException  {
-		serverSocket = new Socket(Settings.getRemoteHostname(), Settings.getRemotePort());
+	private void createConnection(String remoteHost, int remotePort) throws UnknownHostException, IOException  {
+		serverSocket = new Socket(remoteHost, remotePort);
 	    inStream = new DataInputStream(serverSocket.getInputStream());
 	    outStream = new DataOutputStream(serverSocket.getOutputStream());
 	    inReader = new BufferedReader( new InputStreamReader(inStream));
@@ -102,14 +102,12 @@ public class ClientSkeleton extends Thread {
 		} catch (IOException e) {
 			log.error("error closing socket: " + e);
 		}
-		
-		System.exit(-1);
+		System.exit(0);
 		
 	}
 	
 	//Process all incoming message from server
 	public void run(){
-		while(true){
 		try {
 			JSONObject json;
 			String data;
@@ -118,6 +116,9 @@ public class ClientSkeleton extends Thread {
 					json = (JSONObject) parser.parse(data);
 					textFrame.setOutputText(json);
 					System.out.println(data);
+					if(json.get("command") == "REDIRECT") {
+						reconnect(json);
+					}
 				} catch (ParseException pe) {
 					log.error("error in parsing string :"+pe);
 				}
@@ -125,13 +126,23 @@ public class ClientSkeleton extends Thread {
 		} catch (IOException e) {
 			log.error("connection closed with exception: "+e);
 		}
-	}
+	
 	}
 	
 	
-	//Reconnect to other server with provided info, return true if
-	//create success
-	//private boolean reconnect(JSONObject response)
+//	Reconnect to other server with provided info, return true if
+//	create success
+	private boolean reconnect(JSONObject response) {
+		Settings.setRemoteHostname(response.get("hostname").toString());
+		Settings.setRemotePort((Integer) response.get("port"));
+		try {
+			createConnection(Settings.getRemoteHostname(), Settings.getRemotePort());
+		}
+		catch (IOException e) {
+			System.out.println("Unable to create socket");	
+		}
+		return (serverSocket == null);
+	}
 	
 	
 	

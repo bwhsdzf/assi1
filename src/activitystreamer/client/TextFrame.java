@@ -90,7 +90,7 @@ public class TextFrame extends JFrame implements ActionListener {
 	public void actionPerformed(ActionEvent e) {
 		if(e.getSource()==sendButton){
 			String msg = inputText.getText().trim().replaceAll("\r","").replaceAll("\n","").replaceAll("\t", "");
-			System.out.println(msg);
+			//System.out.println(msg);
 			JSONObject obj;
 			try {
 				obj = (JSONObject) parser.parse(msg);
@@ -101,7 +101,9 @@ public class TextFrame extends JFrame implements ActionListener {
 			}
 			
 		} else if(e.getSource()==disconnectButton){
+			this.dispose();
 			ClientSkeleton.getInstance().disconnect();
+			
 		}
 	}
 }
