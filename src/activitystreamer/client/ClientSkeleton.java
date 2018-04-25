@@ -114,10 +114,14 @@ public class ClientSkeleton extends Thread {
 			while((data = inReader.readLine())!=null){
 				try {
 					json = (JSONObject) parser.parse(data);
-					textFrame.setOutputText(json);
-					System.out.println(data);
-					if(json.get("command") == "REDIRECT") {
-						reconnect(json);
+					if (checkMessageIntegrity(json)){
+						textFrame.setOutputText(json);
+						System.out.println(data);
+						if(json.get("command") == "REDIRECT") {
+							if(!reconnect(json)) {
+								System.exit(0);
+							}
+						}
 					}
 				} catch (ParseException pe) {
 					log.error("error in parsing string :"+pe);
@@ -130,8 +134,8 @@ public class ClientSkeleton extends Thread {
 	}
 	
 	
-//	Reconnect to other server with provided info, return true if
-//	create success
+	//Reconnect to other server with provided info, return true if
+	//create success
 	private boolean reconnect(JSONObject response) {
 		Settings.setRemoteHostname(response.get("hostname").toString());
 		Settings.setRemotePort((Integer) response.get("port"));
@@ -147,7 +151,35 @@ public class ClientSkeleton extends Thread {
 	
 	
 	//Used to check the integrity of the server response, true if consistent 
-	//private boolean checkMessageIntegrity(JSONObject response)
-
-	
+	private boolean checkMessageIntegrity(JSONObject response) {
+		if(response.get("command")!=null) {
+			switch(response.get("command").toString()) {
+			case("REDIRECT"):{
+				if(response.get("hostname")!=null & response.get("port")!=null) {		
+				return true;		
+				}
+			else{return false;}		
+			}
+			case("LOGIN_FAILED"):{
+				if(response.get("info")!=null) {
+					return true;
+				}
+				else {return false;}	
+			}
+			case("ACTIVITY_BROADCAST"):{
+				if(response.get("activity")!=null) {
+					return true;	
+				}
+				else {return false;}
+			}
+			case("REGISTER_FAILED"):{
+				if(response.get("info")!=null) {
+					return true;
+				}
+				else {return false;}
+			}
+		 }		
+	  }
+	  return false;			
+	}
 }
