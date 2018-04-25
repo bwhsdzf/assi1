@@ -131,7 +131,6 @@ public class Control extends Thread {
 			default:
 				return processInvalidCommand(con, receivedMSG);
 		}
-		return false;
 	}
 	
 	/*

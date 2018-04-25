@@ -90,17 +90,20 @@ public class TextFrame extends JFrame implements ActionListener {
 	public void actionPerformed(ActionEvent e) {
 		if(e.getSource()==sendButton){
 			String msg = inputText.getText().trim().replaceAll("\r","").replaceAll("\n","").replaceAll("\t", "");
+			//System.out.println(msg);
 			JSONObject obj;
 			try {
 				obj = (JSONObject) parser.parse(msg);
 				ClientSkeleton.getInstance().sendActivityObject(obj);
-				log.error("sending msg");
+				log.debug("sending msg");
 			} catch (ParseException e1) {
 				log.error("invalid JSON object entered into input text field, data not sent");
 			}
 			
 		} else if(e.getSource()==disconnectButton){
+			this.dispose();
 			ClientSkeleton.getInstance().disconnect();
+			
 		}
 	}
 }
