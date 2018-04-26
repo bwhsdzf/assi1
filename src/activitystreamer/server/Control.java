@@ -23,16 +23,21 @@ public class Control extends Thread {
 	// Server connection
 	private static ArrayList<Connection> broadConnections;
 
-	// Database that keeps track of stats for each server
+	// Database that keeps track of status for each server
 	private static HashMap<String, JsonObject> serverInfo = new HashMap<>();
 
-	private int lockDenied;
-	private int lockAllowed;
+	// Hash maps that record the register user, first one record how many
+	// lock allowed is received for it, second one maintain the relation
+	// between user name and their connection
+	private static HashMap<String, Integer> registerList1 = new HashMap<>();
+	private static HashMap<String, Connection> registerList2 = new HashMap<>();
 
 	private static boolean term = false;
 	private static Listener listener;
 
 	private static HashMap<String, String> userInfo = new HashMap<>();
+
+	private String id = Settings.nextSecret().substring(0, 5);
 
 	private final static String INVALID_MESSAGE = "INVALID_MESSAGE";
 	private final static String REGISTER = "REGISTER";
@@ -69,6 +74,7 @@ public class Control extends Thread {
 
 	public Control() {
 		// initialize the connections array
+		connections = new ArrayList<>();
 		loadConnections = new ArrayList<>();
 		broadConnections = new ArrayList<>();
 		if (Settings.getSecret() == null) {
@@ -132,6 +138,10 @@ public class Control extends Thread {
 			return !lockProcess(con, receivedMSG);
 		case LOCK_ALLOWED:
 			return !lockProcess(con, receivedMSG);
+		case ACTIVITY_BROADCAST:
+			return !broadcast(con, receivedMSG);
+		case ACTIVITY_MESSAGE:
+			return !broadcast(con, receivedMSG);
 		default:
 			return false;
 		}
@@ -156,7 +166,8 @@ public class Control extends Thread {
 	public synchronized Connection incomingConnection(Socket s) throws IOException {
 		log.debug("incomming connection: " + Settings.socketAddress(s));
 		Connection c = new Connection(s);
-		connections.add(c);
+		if (c != null)
+			connections.add(c);
 		return c;
 
 	}
@@ -182,21 +193,20 @@ public class Control extends Thread {
 	 * @return True if register successful, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private boolean register(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean register(Connection con, JsonObject receivedMSG) {
 		JSONObject regist = new JSONObject();
 		String secret = receivedMSG.get("secret").getAsString();
 		String username = receivedMSG.get("username").getAsString();
 		if (!loadConnections.contains(con)) {
 			loadConnections.add(con);
 		}
-
-		// Still need to send lock request etc.
-		// TO_DO(*^*%^*&%&$*&*&
+		// If the user is not registered in local database
 		if (!userInfo.containsKey(username)) {
-			userInfo.put(username, secret);
-			lockAllowed = 0;
-			lockDenied = 0;
+
+			// Try to send lock request if needed
 			if (broadConnections.size() > 0) {
+				registerList1.put(username, 0);
+				registerList2.put(username, con);
 				JSONObject registInfo = new JSONObject();
 				registInfo.put("command", LOCK_REQUEST);
 				registInfo.put("username", username);
@@ -204,34 +214,55 @@ public class Control extends Thread {
 				for (Connection server : broadConnections) {
 					server.writeMsg(registInfo.toJSONString());
 				}
-				while (lockAllowed + lockDenied < broadConnections.size()) {
-				}
+				return true;
 			}
-			if (lockAllowed == broadConnections.size()) {
+
+			// Otherwise is a stand alone server, register success
+			else {
 				regist.put("command", REGISTER_SUCCESS);
 				regist.put("info", "register successful for  " + username);
 				con.writeMsg(regist.toJSONString());
 				return true;
 			}
 		}
+
+		// Already registered in database, register fail
 		regist.put("command", REGISTER_FAILED);
 		regist.put("info", username + " is already register with the system");
 		con.writeMsg(regist.toJSONString());
 
-		return true;
+		return false;
 	}
 
-	private boolean lockProcess(Connection con, JsonObject receivedMSG) {
+	@SuppressWarnings("unchecked")
+	private synchronized boolean lockProcess(Connection con, JsonObject receivedMSG) {
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated server");
 			con.writeMsg(invalidMsg.toJsonString());
 			return false;
 		}
-		if (receivedMSG.get("command").getAsString() == LOCK_ALLOWED)
-			lockAllowed++;
-		if (receivedMSG.get("command").getAsString() == LOCK_DENIED)
-			lockDenied++;
+		String username = receivedMSG.get("username").getAsString();
+		if (receivedMSG.get("command").getAsString() == LOCK_ALLOWED) {
+			int n = registerList1.get(username) + 1;
+			registerList1.put(username, n);
+			if (n == broadConnections.size()) {
+				JSONObject response = new JSONObject();
+				response.put("command", REGISTER_SUCCESS);
+				response.put("info", "register successful for  " + username);
+				registerList2.get(username).writeMsg(response.toJSONString());
+				registerList1.remove(username);
+				registerList2.remove(username);
+				return true;
+			}
+		} else if (receivedMSG.get("command").getAsString() == LOCK_DENIED) {
+			JSONObject response = new JSONObject();
+			response.put("command", REGISTER_FAILED);
+			response.put("info", username + " is already register with the system");
+			registerList2.get(username).writeMsg(response.toJSONString());
+			registerList1.remove(username);
+			registerList2.remove(username);
+		}
 		return true;
 	}
 
@@ -243,7 +274,7 @@ public class Control extends Thread {
 	 * @return Always true to indicated the connection should not be closed
 	 */
 	@SuppressWarnings("unchecked")
-	private boolean lockRequest(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean lockRequest(Connection con, JsonObject receivedMSG) {
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated server");
@@ -253,11 +284,12 @@ public class Control extends Thread {
 		String username = receivedMSG.get("username").getAsString();
 		String secret = receivedMSG.get("secret").getAsString();
 		JSONObject response = new JSONObject();
-		if (!userInfo.containsKey(username)) {
+		if (!userInfo.containsKey(username) || userInfo.get(username) != secret) {
 			response.put("command", LOCK_ALLOWED);
 			response.put("username", username);
 			response.put("secret", secret);
 			userInfo.put(username, secret);
+			return true;
 		}
 		response.put("command", LOCK_DENIED);
 		response.put("username", username);
@@ -276,7 +308,7 @@ public class Control extends Thread {
 	 * @return True if login successful, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private boolean login(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean login(Connection con, JsonObject receivedMSG) {
 		JSONObject login = new JSONObject();
 		String command;
 		String secret = receivedMSG.get("secret").getAsString();
@@ -289,6 +321,12 @@ public class Control extends Thread {
 			command = LOGIN_SUCCESS;
 			login.put("command", command);
 			login.put("info", "logged in as user " + username);
+			if (!loadConnections.contains(con)) {
+				loadConnections.add(con);
+
+			}
+			con.setUsername(username);
+			con.setSecret(secret);
 
 			for (JsonObject info : serverInfo.values()) {
 				String hostname = info.get("hostname").toString();
@@ -298,6 +336,7 @@ public class Control extends Thread {
 					login.put("command", REDIRECT);
 					login.put("hostname", hostname);
 					login.put("port", port);
+					con.closeCon();
 					return false;
 				}
 			}
@@ -324,7 +363,7 @@ public class Control extends Thread {
 	 * @return True if authenticate success, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private boolean auth(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean auth(Connection con, JsonObject receivedMSG) {
 		JSONObject auth = new JSONObject();
 		String command;
 		String info;
@@ -358,7 +397,7 @@ public class Control extends Thread {
 	 * @param receivedMSG
 	 * @return True if process successfully, false otherwise
 	 */
-	private boolean announce(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean announce(Connection con, JsonObject receivedMSG) {
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated server");
@@ -368,6 +407,45 @@ public class Control extends Thread {
 		String hostname = receivedMSG.get("hostname").getAsString();
 		serverInfo.put(hostname, receivedMSG);
 		return true;
+	}
+
+	@SuppressWarnings("unchecked")
+	private synchronized boolean broadcast(Connection con, JsonObject receivedMSG) {
+		if (!loadConnections.contains(con) && !broadConnections.contains(con)) {
+			InvalidMessage invalidMsg = new InvalidMessage();
+			invalidMsg.setInfo("Unanthenticated connection");
+			con.writeMsg(invalidMsg.toJsonString());
+			return false;
+		}
+		JSONObject response = new JSONObject();
+		if (receivedMSG.get("command").getAsString() == ACTIVITY_MESSAGE) {
+			String username = receivedMSG.get("username").getAsString();
+			String secret = receivedMSG.get("secret").getAsString();
+			if (con.getUsername().equals(username) && con.getSecret().equals(secret)) {
+				response.put("command", ACTIVITY_BROADCAST);
+				response.put("activity", receivedMSG.get("activity").getAsString());
+				for (Connection connection : connections) {
+					if (connection != con)
+						connection.writeMsg(response.toJSONString());
+				}
+				return true;
+			} else {
+				response.put("command", AUTHENTICATION_FAIL);
+				response.put("info", "Unauthenticated connection");
+				con.writeMsg(response.toJSONString());
+				return false;
+			}
+		} else if (receivedMSG.get("command").getAsString() == ACTIVITY_BROADCAST) {
+			response.put("command", ACTIVITY_BROADCAST);
+			response.put("activity", receivedMSG.get("activity").getAsString());
+			for (Connection connection : connections) {
+				if (connection != con)
+					connection.writeMsg(response.toJSONString());
+			}
+			return true;
+		}
+		return false;
+
 	}
 
 	@Override
@@ -406,11 +484,10 @@ public class Control extends Thread {
 	 * @return
 	 */
 	@SuppressWarnings("unchecked")
-	public boolean doActivity() {
+	public synchronized boolean doActivity() {
 		try {
 			String localHost = InetAddress.getLocalHost().getHostName();
 			System.out.println("local host name is " + localHost);
-			String id = Settings.nextSecret().substring(0, 5);
 			JSONObject json = new JSONObject();
 			json.put("command", SERVER_ANNOUNCE);
 			json.put(id, Settings.getSecret());
@@ -446,14 +523,15 @@ public class Control extends Thread {
 	 */
 	private boolean checkMsgIntegrity(Connection con, JsonObject json) {
 		InvalidMessage response = new InvalidMessage();
+		System.out.println(json);
 		if (json.get("command") != null) {
 			response.setInfo("No command");
 			return false;
 		}
-		switch (json.get("command").toString()) {
+		switch (json.get("command").getAsString()) {
 		case LOGIN:
-			if (json.get("username") != null && json.get("secret") != null) {
-				response.setInfo("Not providing correct username or secret");
+			if (json.get("username") != null) {
+				response.setInfo("Not providing correct username");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
@@ -473,8 +551,8 @@ public class Control extends Thread {
 			}
 			return true;
 		case ACTIVITY_MESSAGE:
-			if (json.get("username") != null && json.get("secret") != null) {
-				response.setInfo("Not providing correct username or secret");
+			if (json.get("username") != null && json.get("activity") != null) {
+				response.setInfo("Activity message not complete");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}

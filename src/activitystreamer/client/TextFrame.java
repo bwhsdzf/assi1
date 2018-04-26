@@ -101,8 +101,10 @@ public class TextFrame extends JFrame implements ActionListener {
 			}
 			
 		} else if(e.getSource()==disconnectButton){
-			this.dispose();
+			
 			ClientSkeleton.getInstance().disconnect();
+			this.dispose();
+			System.exit(0);
 			
 		}
 	}
