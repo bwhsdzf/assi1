@@ -1,6 +1,6 @@
 package activitystreamer.server;
 
-import com.google.gson.Gson;
+import org.json.simple.JSONObject;
 
 public class InvalidMessage {
 
@@ -17,7 +17,11 @@ public class InvalidMessage {
         this.info = info;
     }
 
-    public String toJsonString() {
-        return new Gson().toJson(this);
+    @SuppressWarnings("unchecked")
+	public String toJsonString() {
+        JSONObject json = new JSONObject();
+        json.put("command", command);
+        json.put("info", info);
+        return json.toJSONString();
     }
 }

@@ -1,14 +1,15 @@
 package activitystreamer.server;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.util.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
-import org.json.*;
 
 import activitystreamer.util.Settings;
 import org.json.simple.JSONObject;
@@ -23,8 +24,8 @@ public class Control extends Thread {
 	private static ArrayList<Connection> broadConnections;
 	
 	
-	//Database that keeps track of number of clients connected to each server
-	private static HashMap<String,Integer> clientNum = new HashMap<>();
+	//Database that keeps track of stats for each server
+	private static HashMap<String,JsonObject> serverInfo = new HashMap<>();
 
 	private static boolean term=false;
 	private static Listener listener;
@@ -43,20 +44,15 @@ public class Control extends Thread {
 	private final static String LOGOUT = "LOGOUT";
 	
 	private final static String LOCK_REQUEST = "LOCK_REQUEST";
+	private final static String LOCK_DENIED = "LOCK_DENIED";
+	private final static String LOCK_ALLOWED = "LOCK_ALLOWED";
 
-	//
-	private final static String CLIENT_AUTHENTICATE = "CLIENT_AUTHENTICATE";
-	
-	
+
 	private final static String ACTIVITY_BROADCAST = "ACTIVITY_BROADCAST";
 	private final static String ACTIVITY_MESSAGE = "ACTIVITY_MESSAGE";
 
 	private final static String AUTHENTICATION_FAIL = "AUTHTENTICATION_FAIL";
 	private final static String AUTHENTICATE = "AUTHENTICATE";
-	
-	//
-	private final static String REPEATED_AUTHENTICATION = "REPEATED_AUTHENTICATION";
-	private final static String UNAUTHENTICATED_SERVER = "UNAUTHENTICATED_SERVER";
 
 	private final static String REDIRECT = "REDIRECT";
 	private final static String SERVER_ANNOUNCE = "SERVER_ANNOUNCE";
@@ -74,8 +70,11 @@ public class Control extends Thread {
 		// initialize the connections array
 		loadConnections = new ArrayList<>();
 		broadConnections = new ArrayList<>();
-		String secret = Settings.nextSecret();
-		Settings.setSecret(secret);
+		if(Settings.getSecret() == null) {
+			String secret = Settings.nextSecret();
+			Settings.setSecret(secret);
+			System.out.println("Using new secret: "+ secret);
+		}
 		// start a listener
 		try {
 			listener = new Listener();
@@ -101,17 +100,9 @@ public class Control extends Thread {
 	/*
 	 * Processing incoming messages from the connection.
 	 * Return true if the connection should close.
-	 * synchronized 同时只能被一个线程使用
-	 * 出现了问题 term=true 下一个循环就关闭connection
-	 * regist
-	 * login
-	 * logout
-	 * active
 	 */
 	public synchronized boolean process(Connection con, String msg){
 		JsonObject receivedMSG;
-		String command;
-		String info;
 		try
 		{
 			receivedMSG = new Gson().fromJson(msg, JsonObject.class);
@@ -120,34 +111,30 @@ public class Control extends Thread {
 		{
 			return true;
 		}
-		if (!receivedMSG.has("command"))
-		{
-			InvalidMessage invalidMessage = new InvalidMessage();
-			invalidMessage.setInfo("the received message did not contain a command");
-			con.writeMsg(invalidMessage.toJsonString());
-			return true;
+		if(!checkMsgIntegrity(con, receivedMSG)) {
+			return false;
 		}
 		String message = receivedMSG.get("command").getAsString();
 		switch(message){
 			case REGISTER:
-				if(!loadConnections.contains(con)) {
-					loadConnections.add(con);
-				}
-				//return register(con, receivedMSG);
+				return !register(con, receivedMSG);
 			case LOGIN:
 				return !login(con, receivedMSG);
 			case AUTHENTICATE:
 				return !auth(con, receivedMSG);
 			case INVALID_MESSAGE:
-				//return invalid(con, receivedMSG);
+				return true;
 			case SERVER_ANNOUNCE:
-				//return announce(con, receivedMSG);
+				return !announce(con, receivedMSG);
 			case LOGOUT:
-				//return logout(con, receivedMSG);
+				return true;
 			case LOCK_REQUEST:
-				//return lockRequest(con,receivedMSG);
+				return !lockRequest(con,receivedMSG);
+			case LOCK_DENIED:
+				return false;
+				//return lockDenied(con,receivedMSG);
 			default:
-				//return processInvalidCommand(con, receivedMSG);
+				return false;
 		}
 	}
 	
@@ -182,54 +169,66 @@ public class Control extends Thread {
 		
 	}
 
-	
-//	//This is for checking if the message contain valid username and secret
-//	private boolean validUserInfo(Connection con, JsonObject receivedMSG) {
-//		InvalidMessage invalidMsg = new InvalidMessage();
-//		if (!receivedMSG.has("username")) {
-//			invalidMsg.setInfo("username must be contained");
-//			con.writeMsg(invalidMsg.toJsonString());
-//			return false;
-//		} else if (!receivedMSG.has("secret")) {
-//			invalidMsg.setInfo("secret must be contained");
-//			con.writeMsg(invalidMsg.toJsonString());
-//			return false;
-//		} else {
-//			return true;
-//		}
-//	}
 
-	
+	/**Process the register command from client
+	 * Will first look into local database, then send lock request to
+	 * other server.
+	 * @param con
+	 * @param receivedMSG
+	 * @return True if register successful, false otherwise
+	 */
 	@SuppressWarnings("unchecked")
 	private boolean register(Connection con, JsonObject receivedMSG){
-		String command;
-		String info;
 		JSONObject regist = new JSONObject();
-		if(!validUserInfo(con, receivedMSG)){
-			return false;
-		}
 		String secret = receivedMSG.get("secret").getAsString();
 		String username = receivedMSG.get("username").getAsString();
+		if(!loadConnections.contains(con)) {
+			loadConnections.add(con);
+		}
 		
 		//Still need to send lock request etc.
-		if (userInfo.containsKey(username) || username.equals(ANONYMOUS_USERNAME)){
-			command = REGISTER_FAILED;
-			//String registFailedMSG = toJsonString(command);
-			info = username + " is already registered with the system.";
-			//String registFailedInfo = toJsonString(info);
-			regist.put(command,info);
+		//TO_DO(*^*%^*&%&$*&*&
+		if(!userInfo.containsKey(username)) {
+			userInfo.put(username, secret);
+			regist.put("command", REGISTER_SUCCESS);
+			regist.put("info", "register successful for" + username);
 			con.writeMsg(regist.toJSONString());
-			return true;
-		}else{
-			command = REGISTER_SUCCESS;
-			//String registSuccessMSG = toJsonString(command);
-			info = "register success for " + username;
-			//String registSuccessInfo = toJsonString(info);
-			regist.put(command,info);
-			con.writeMsg(regist.toJSONString());
-			userInfo.put(username,secret);
 			return true;
 		}
+		else {
+			regist.put("command", REGISTER_FAILED);
+			regist.put("info", username+ " is already register with the system");
+			con.writeMsg(regist.toJSONString());
+		}
+		
+		
+		
+		return true;
+	}
+	
+	
+	/**Process the lock request sent from other server
+	 * 
+	 * @param con
+	 * @param receivedMSG
+	 * @return Always true to indicated the connection should not be closed
+	 */
+	@SuppressWarnings("unchecked")
+	private boolean lockRequest(Connection con, JsonObject receivedMSG) {
+		String username = receivedMSG.get("username").getAsString();
+		String secret = receivedMSG.get("secret").getAsString();
+		JSONObject response = new JSONObject();
+		if(!userInfo.containsKey(username)) {
+			response.put("command", LOCK_ALLOWED);
+			response.put("username", username);
+			response.put("secret", secret);
+			userInfo.put(username, secret);
+		}
+		response.put("command", LOCK_DENIED);
+		response.put("username", username);
+		response.put("secret", secret);
+		con.writeMsg(response.toJSONString());
+		return true;
 	}
 
 	
@@ -239,100 +238,46 @@ public class Control extends Thread {
 	 * @param receivedMSG The coming message
 	 * @return True if login successful, false otherwise
 	 */
-//	@SuppressWarnings("unchecked")
-//	private boolean login(Connection con, JsonObject receivedMSG){
-//		JSONObject login = new JSONObject();
-//		String command;
-//		String info;
-//		if(!validUserInfo(con, receivedMSG)){
-//			return false;
-//		}
-//		String secret = receivedMSG.get("secret").getAsString();
-//		String username = receivedMSG.get("username").getAsString();
-//		//这里应该是登录成功然后redirect，缺一段找其他server的代码
-//		if( (username.equals(ANONYMOUS_USERNAME) && secret == null) ||
-//				userInfo.get(username).equals(secret)){
-//			command = LOGIN_SUCCESS;
-//			//String loginSuccessMSG = toJsonString(command);
-//			info = "logged in as user " + username;
-//			//String loginSucessInfo = toJsonString()
-//			login.put("command",command);
-//			login.put("info", info);
-//			con.writeMsg(login.toJSONString());
-//			
-//			//Check and move the connection to client connection list
-//			if(!loadConnections.contains(con))
-//				loadConnections.add(con);
-//			
-//			//Lock request
-//			
-//			
-//	}
-//		else{
-//			command = LOGIN_FAILED;
-//			//String loginFailedMSG = toJsonString(command);
-//			info = "attempt to login with wrong secret";
-//			//String loginFailedInfo = toJsonString(info);
-//			login.put(command,info);
-//			con.writeMsg(login.toJSONString());
-//			return true;
-//		}
-//		
-//		return true;
-//	}
+	@SuppressWarnings("unchecked")
 	private boolean login(Connection con, JsonObject receivedMSG){
 		JSONObject login = new JSONObject();
 		String command;
-		String info;
-		int num;
-		if(validUserInfo(con, receivedMSG)){		
-			String secret = receivedMSG.get("secret").getAsString();
-			String username = receivedMSG.get("username").getAsString();
-			if(!username.equals(ANONYMOUS_USERNAME){
-				if(userInfo.containsKey(username)){
-					if(userInfo.get(username).equals(secret))){
-			        	num=clientNum.get(Settings.getRemoteHostname());
-			        	for(String getKey:clientNum.keySet()){  
-			        		if(clientNum.get(getKey)+2<num){  
-			        			key = getKey; 
-			        			login.put("command","REDERICT");
-			        			login.put("hostname",空白);
-			        			login.put("port",空白);
-			        			return false;
-			        		}
-			        	}
-			        	command = LOGIN_SUCCESS;
-		        		info = "logged in as user " + username;
-		        		login.put("command",command);
-		        		login.put("info",info);
-		        		return true;
-		        }
-			 else {
-		        	command=LOGIN_FAILED;
-		        	info = "attempt to login with wrong secret";
-		        	login.put("command",command);
-					login.put("info",info);
-					return false;
-			}			
-		}	
-				else {
-					command=LOGIN_FAILED;
-		        	info = "attempt to login with wrong username";
-		        	login.put("command",command);
-					login.put("info",info);
+		String secret = receivedMSG.get("secret").getAsString();
+		String username = receivedMSG.get("username").getAsString();
+		int currentLoad = loadConnections.size();
+	
+		
+		//If the user login as anoneymous or has right name and secret
+		//then send login success and check if need to redirect
+		if( (username.equals(ANONYMOUS_USERNAME) && secret == null) ||
+				userInfo.get(username).equals(secret)){
+			command = LOGIN_SUCCESS;
+			login.put("command",command);
+			login.put("info","logged in as user " + username);
+			
+			for(JsonObject info:serverInfo.values()){
+				String hostname = info.get("hostname").toString();
+				int load =info.get("load").getAsInt();
+				int port =info.get("port").getAsInt();
+				if(load+2<currentLoad){
+					login.put("command",REDIRECT);
+					login.put("hostname",hostname);
+					login.put("port",port);
 					return false;
 				}
-			}	
-		else {
-			command = LOGIN_SUCCESS;
-			info = "logged in as user " + ANONYMOUS_USERNAME;
+			}
+		}
+		//Else login fail
+		else{
+			command = LOGIN_FAILED;
 			login.put("command",command);
-			login.put("info",info);
+			login.put("info", "attempt to login with wrong secret");
+			con.writeMsg(login.toJSONString());
 			return true;
 		}
-	   }
-	}
 		
+		return true;
+	}
 
 	
 	/**Process the AUTHENTICATE command from other server
@@ -346,16 +291,14 @@ public class Control extends Thread {
 		String command;
 		String info;
 		
-		if(!receivedMSG.has("secret")){
-			command = AUTHENTICATION_FAIL;
-			//String authFailMSG = toJsonString();
-			info = "the supplied secret is incorrect";
-			auth.put("command", command);
-			auth.put("info",info);
-			con.writeMsg(auth.toJSONString());
-			return false;
+		//If already authenticated then reply with invalid message
+		if(broadConnections.contains(con)) {
+			InvalidMessage response = new InvalidMessage();
+			response.setInfo("Already authenticated in this server");
+			con.writeMsg(response.toJsonString());
+			return true;
 		}
-		
+		//Check if provided secret matches the setting
 		String secret = receivedMSG.get("secret").getAsString();
 		if(!secret.equals(Settings.getSecret())){
 			command = AUTHENTICATION_FAIL;
@@ -366,61 +309,27 @@ public class Control extends Thread {
 			con.writeMsg(auth.toJSONString());
 			return false;
 		}
-		
-		//Check if the connection is already authenticated
-		for (Connection connection : broadConnections) {
-			if (con.getSocket().getInetAddress() == connection.getSocket().getInetAddress()) {
-				InvalidMessage invalidMsg = new InvalidMessage();
-				invalidMsg.setInfo(REPEATED_AUTHENTICATION);
-				con.writeMsg(invalidMsg.toJsonString());
-			}else{
-				broadConnections.add(con);
-			}
-		}
+		broadConnections.add(con);
 		return true;
 	}
-
-	//
-	private boolean invalid(Connection con, JsonObject receivedMSG){
-		String errorInfo = receivedMSG.get("info").getAsString();
-		if (errorInfo.equals(UNAUTHENTICATED_SERVER) ||
-				errorInfo.equals(REPEATED_AUTHENTICATION))
-		{
-			return true;
+	
+	/**Process the coming server announce message, update local info
+	 * 
+	 * @param con
+	 * @param receivedMSG
+	 * @return True if process successfully, false otherwise
+	 */
+	private boolean announce(Connection con, JsonObject receivedMSG){
+		if(!broadConnections.contains(con)){
+			InvalidMessage invalidMsg = new InvalidMessage();
+			invalidMsg.setInfo("Unanthenticated server");
+			con.writeMsg(invalidMsg.toJsonString());
+			return false;
 		}
-		return false;
-	}
-
-	private boolean logout(Connection con, JsonObject receivedMSG){
-		String logoutInfo = receivedMSG.get("command").getAsString();
-		if(logoutInfo.equals(LOGOUT)){
-			if(loadConnections.contains(con))
-				loadConnections.remove(con);
-			connections.remove(con);
-			return true;
-		}
-		return false;
-	}
-
-
-	//这个地方是broadcast了
-//	private boolean announce(Connection con, JsonObject receivedMSG){
-//		if(!loadConnections.contains(con)){
-//			InvalidMessage invalidMsg = new InvalidMessage();
-//			invalidMsg.setInfo(UNAUTHENTICATED_SERVER);
-//			con.writeMsg(invalidMsg.toJsonString());
-//			return true;
-//		}
-//	}
-
-	private boolean processInvalidCommand(Connection con, JsonObject receivedMSG){
-		String command = receivedMSG.get("command").getAsString();
-		InvalidMessage invalidMsg = new InvalidMessage();
-		invalidMsg.setInfo("Invalid command: " + command);
-		con.writeMsg(invalidMsg.toJsonString());
+		String hostname = receivedMSG.get("hostname").getAsString();
+		serverInfo.put(hostname, receivedMSG);
 		return true;
 	}
-
 	
 	@Override
 	public void run(){
@@ -444,12 +353,35 @@ public class Control extends Thread {
 		for(Connection connection : connections){
 			connection.closeCon();
 		}
+		for(Connection connection : loadConnections){
+			connection.closeCon();
+		}
+		for(Connection connection : broadConnections){
+			connection.closeCon();
+		}
 		listener.setTerm(true);
 	}
 	
 	
 	//Broadcasting message to other server
+	@SuppressWarnings("unchecked")
 	public boolean doActivity(){
+		try {
+			String localHost = InetAddress.getLocalHost().getHostName();
+			System.out.println("local host name is "+ localHost);
+			String id = Settings.nextSecret().substring(0, 5);
+			JSONObject json = new JSONObject();
+			json.put("command", SERVER_ANNOUNCE);
+			json.put(id,Settings.getSecret());
+			json.put("load", loadConnections.size());
+			json.put("hostname", Settings.getLocalHostname());
+			json.put("port", Settings.getLocalPort());
+			for(Connection cons:broadConnections) {
+				cons.writeMsg(json.toJSONString());
+			}
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		}
 		return false;
 	}
 	
@@ -459,5 +391,90 @@ public class Control extends Thread {
 	
 	public final ArrayList<Connection> getConnections() {
 		return connections;
+	}
+	
+	
+	/**Checks the integrity of coming message, whether they contain correct field according to
+	 * their command
+	 * @param json The coming message
+	 * @param con The connection from which the message came
+	 * @return true if the message is integrate, false otherwise.
+	 */
+	private boolean checkMsgIntegrity(Connection con,JsonObject json) {
+		InvalidMessage response = new InvalidMessage();
+		if(json.get("command")!= null) {
+			response.setInfo("No command");
+			return false;
+		}
+		switch (json.get("command").toString()) {
+		case LOGIN:
+			if(json.get("username")!= null && json.get("secret")!= null) {
+				response.setInfo("Not providing correct username or secret");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		case REGISTER:
+			if(json.get("username")!= null && json.get("secret")!= null) {
+				response.setInfo("Not providing correct username or secret");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		case AUTHENTICATE:
+			if(json.get("secret")==null) {
+				response.setInfo("Not providing secret");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		case ACTIVITY_MESSAGE:
+			if(json.get("username")!= null && json.get("secret")!= null) {
+				response.setInfo("Not providing correct username or secret");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		case SERVER_ANNOUNCE:
+			if(json.get("hostname")!= null && json.get("port")!= null && json.get("load")!= null) {
+				response.setInfo("Not providing correct server info");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		case ACTIVITY_BROADCAST:
+			if(json.get("activity")!= null) {
+				response.setInfo("No activity");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		case LOCK_REQUEST:
+			if(json.get("username")!= null && json.get("secret")!= null) {
+				response.setInfo("Not providing username or secret correctly");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		case LOCK_ALLOWED:
+			if(json.get("username")!= null && json.get("secret")!= null) {
+				response.setInfo("Not providing username or secret correctly");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		case LOCK_DENIED:
+			if(json.get("username")!= null && json.get("secret")!= null) {
+				response.setInfo("Not providing username or secret correctly");
+				con.writeMsg(response.toJsonString());
+				return false;
+			}
+			return true;
+		default:
+			response.setInfo("No such command");
+			con.writeMsg(response.toJsonString());
+			return false;
+		}
+		
 	}
 }
