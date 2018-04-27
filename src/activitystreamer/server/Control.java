@@ -36,8 +36,10 @@ public class Control extends Thread {
 	private static boolean term = false;
 	private static Listener listener;
 
+	// Database that record the user login information
 	private static HashMap<String, String> userInfo = new HashMap<>();
 
+	// The server id
 	private String id = Settings.nextSecret().substring(0, 5);
 
 	private final static String INVALID_MESSAGE = "INVALID_MESSAGE";
@@ -76,10 +78,12 @@ public class Control extends Thread {
 	}
 
 	public Control() {
-		// initialize the connections array
+		// initialize the connections arrays
 		connections = new ArrayList<>();
 		loadConnections = new ArrayList<>();
 		broadConnections = new ArrayList<>();
+
+		// Generate secret if need
 		if (Settings.getSecret() == null) {
 			String secret = Settings.nextSecret();
 			Settings.setSecret(secret);
@@ -88,11 +92,14 @@ public class Control extends Thread {
 		// start a listener
 		try {
 			listener = new Listener();
-			initiateConnection();
 		} catch (IOException e1) {
 			log.fatal("failed to startup a listening thread: " + e1);
 			System.exit(-1);
 		}
+
+		// Initiate connection
+		initiateConnection();
+		start();
 	}
 
 	public void initiateConnection() {
@@ -116,14 +123,16 @@ public class Control extends Thread {
 		JsonObject receivedMSG;
 
 		try {
-
 			receivedMSG = parser.parse(msg).getAsJsonObject();
-			System.out.println("string to json " + receivedMSG);
+			// System.out.println("string to json " + receivedMSG);
 		} catch (JsonSyntaxException e) {
 			return true;
 		}
+
+		// Check the integrity of the message
 		if (!checkMsgIntegrity(con, receivedMSG)) {
 			con.closeCon();
+			return false;
 		}
 		String message = receivedMSG.get("command").getAsString();
 		switch (message) {
@@ -235,7 +244,7 @@ public class Control extends Thread {
 				return true;
 			}
 
-			// Otherwise is a stand alone server, register success
+			// Otherwise this is a stand alone server, register success
 			else {
 				userInfo.put(username, secret);
 				regist.put("command", REGISTER_SUCCESS);
@@ -249,25 +258,35 @@ public class Control extends Thread {
 		regist.put("command", REGISTER_FAILED);
 		regist.put("info", username + " is already register with the system");
 		con.writeMsg(regist.toJSONString());
-
 		return false;
 	}
 
+	/**
+	 * Handles the lock_allowed and lock_denied from other server If received
+	 * lock_allowed, increment the counter of the user name by 1 If received
+	 * lock_denied, send register fail right away to the user connection
+	 * 
+	 * @param con
+	 * @param receivedMSG
+	 * @return True if register successful, false otherwise
+	 */
 	@SuppressWarnings("unchecked")
 	private synchronized boolean lockProcess(Connection con, JsonObject receivedMSG) {
+		// Check if the message source is authenticated
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated server");
 			con.writeMsg(invalidMsg.toJsonString());
 			return false;
 		}
-		System.out.println(receivedMSG.toString());
 		String username = receivedMSG.get("username").getAsString();
 		String secret = receivedMSG.get("secret").getAsString();
-		if (receivedMSG.get("command").getAsString() .equals(LOCK_ALLOWED)) {
+
+		if (receivedMSG.get("command").getAsString().equals(LOCK_ALLOWED)) {
 			int n = registerList1.get(username) + 1;
 			registerList1.put(username, n);
-			System.out.print("n " + n + ", size "+ broadConnections.size());
+			// If the number of allow reaches the number of connected server
+			// send register success
 			if (n == broadConnections.size()) {
 				userInfo.put(username, secret);
 				JSONObject response = new JSONObject();
@@ -278,7 +297,10 @@ public class Control extends Thread {
 				registerList2.remove(username);
 				return true;
 			}
-		} else if (receivedMSG.get("command").getAsString().equals(LOCK_DENIED)) {
+
+		}
+		// If received lock denied, send register failed immediately
+		else if (receivedMSG.get("command").getAsString().equals(LOCK_DENIED)) {
 			JSONObject response = new JSONObject();
 			response.put("command", REGISTER_FAILED);
 			response.put("info", username + " is already register with the system");
@@ -290,11 +312,12 @@ public class Control extends Thread {
 	}
 
 	/**
-	 * Process the lock request sent from other server
+	 * Process the lock request sent from other server Check local database and
+	 * return the response to connection
 	 * 
 	 * @param con
 	 * @param receivedMSG
-	 * @return Always true to indicated the connection should not be closed
+	 * @return True if the message source is authenticated, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
 	private synchronized boolean lockRequest(Connection con, JsonObject receivedMSG) {
@@ -307,7 +330,10 @@ public class Control extends Thread {
 		String username = receivedMSG.get("username").getAsString();
 		String secret = receivedMSG.get("secret").getAsString();
 		JSONObject response = new JSONObject();
-		if (!userInfo.containsKey(username) || userInfo.get(username) != secret) {
+
+		// If the user name does not exist in local database
+		// store it now
+		if (!userInfo.containsKey(username)) {
 			response.put("command", LOCK_ALLOWED);
 			response.put("username", username);
 			response.put("secret", secret);
@@ -315,6 +341,7 @@ public class Control extends Thread {
 			con.writeMsg(response.toJSONString());
 			return true;
 		}
+		// Otherwise return lock denied
 		response.put("command", LOCK_DENIED);
 		response.put("username", username);
 		response.put("secret", secret);
@@ -339,10 +366,10 @@ public class Control extends Thread {
 		String username = receivedMSG.get("username").getAsString();
 		int currentLoad = loadConnections.size();
 
-		// If the user login as anoneymous or has right name and secret
+		// If the user login as anonymous or has right name and secret
 		// then send login success and check if need to redirect
-		if ((username.equals(ANONYMOUS_USERNAME) && secret == null) || (userInfo.containsKey(username)
-				&& userInfo.get(username).equals(secret)))  {
+		if ((username.equals(ANONYMOUS_USERNAME) && secret == null)
+				|| (userInfo.containsKey(username) && userInfo.get(username).equals(secret))) {
 
 			command = LOGIN_SUCCESS;
 			login.put("command", command);
@@ -353,6 +380,8 @@ public class Control extends Thread {
 			con.setUsername(username);
 			con.setSecret(secret);
 			con.writeMsg(login.toJSONString());
+
+			// Check for redirect
 			if (!serverInfo.isEmpty()) {
 				for (JsonObject info : serverInfo.values()) {
 					JSONObject redirect = new JSONObject();
@@ -433,11 +462,25 @@ public class Control extends Thread {
 			con.writeMsg(invalidMsg.toJsonString());
 			return false;
 		}
+		
+		//Broadcast announcement to other servers
+		for (Connection server : broadConnections) {
+			if (con != server) {
+				server.writeMsg(receivedMSG.getAsString());
+			}
+		}
 		String hostname = receivedMSG.get("hostname").getAsString();
 		serverInfo.put(hostname, receivedMSG);
 		return true;
 	}
 
+	/**
+	 * Process the broadcast message from other servers Update their server info
+	 * 
+	 * @param con
+	 * @param receivedMSG
+	 * @return True if the message source is authenticated, false otherwise
+	 */
 	@SuppressWarnings("unchecked")
 	private synchronized boolean broadcast(Connection con, JsonObject receivedMSG) {
 		if (!loadConnections.contains(con) && !broadConnections.contains(con)) {
@@ -446,9 +489,9 @@ public class Control extends Thread {
 			con.writeMsg(invalidMsg.toJsonString());
 			return false;
 		}
-		
-		System.out.println("Broadcasting");
-		
+
+		// System.out.println("Broadcasting");
+
 		JSONObject response = new JSONObject();
 		if (receivedMSG.get("command").getAsString().equals(ACTIVITY_MESSAGE)) {
 			String username = receivedMSG.get("username").getAsString();
@@ -512,25 +555,20 @@ public class Control extends Thread {
 	}
 
 	/**
+	 * Broadcast the server states to other server
 	 * 
 	 * @return
 	 */
 	@SuppressWarnings("unchecked")
 	public synchronized boolean doActivity() {
-		try {
-			String localHost = InetAddress.getLocalHost().getHostName();
-			System.out.println("local host name is " + localHost);
-			JSONObject json = new JSONObject();
-			json.put("command", SERVER_ANNOUNCE);
-			json.put(id, Settings.getSecret());
-			json.put("load", loadConnections.size());
-			json.put("hostname", Settings.getLocalHostname());
-			json.put("port", Settings.getLocalPort());
-			for (Connection cons : broadConnections) {
-				cons.writeMsg(json.toJSONString());
-			}
-		} catch (UnknownHostException e) {
-			e.printStackTrace();
+		JSONObject json = new JSONObject();
+		json.put("command", SERVER_ANNOUNCE);
+		json.put(id, Settings.getSecret());
+		json.put("load", loadConnections.size());
+		json.put("hostname", Settings.getLocalHostname());
+		json.put("port", Settings.getLocalPort());
+		for (Connection cons : broadConnections) {
+			cons.writeMsg(json.toJSONString());
 		}
 		return false;
 	}

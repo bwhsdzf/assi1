@@ -23,9 +23,10 @@ public class Connection extends Thread {
 	private Socket socket;
 	private boolean term = false;
 
+	
+	//Record the login state of the client connection
 	private String username;
 	private String secret;
-	private boolean login;
 
 	Connection(Socket socket) throws IOException {
 		in = new DataInputStream(socket.getInputStream());

@@ -32,6 +32,20 @@ public class ClientSkeleton extends Thread {
 
 	private boolean isNewUser = false;
 
+	private final static String LOGIN = "LOGIN";
+	private final static String LOGIN_SUCCESS = "LOGIN_SUCCESS";
+	private final static String LOGIN_FAILED = "LOGIN_FAILED";
+	private final static String LOGOUT = "LOGOUT";
+	private final static String ACTIVITY_BROADCAST = "ACTIVITY_BROADCAST";
+	private final static String ACTIVITY_MESSAGE = "ACTIVITY_MESSAGE";
+
+	private final static String AUTHENTICATION_FAIL = "AUTHTENTICATION_FAIL";
+	private final static String REDIRECT = "REDIRECT";
+	private final static String INVALID_MESSAGE = "INVALID_MESSAGE";
+	private final static String REGISTER = "REGISTER";
+	private final static String REGISTER_SUCCESS = "REGISTER_SUCCESS";
+	private final static String REGISTER_FAILED = "REGISTER_FAILED";
+
 	public static ClientSkeleton getInstance() {
 		if (clientSolution == null) {
 			clientSolution = new ClientSkeleton();
@@ -60,12 +74,12 @@ public class ClientSkeleton extends Thread {
 			msg.put("secret", Settings.getSecret());
 			if (isNewUser) {
 				// Register
-				msg.put("command", "REGISTER");
+				msg.put("command", REGISTER);
 			} else {
 				// Login
-				msg.put("command", "LOGIN");
+				msg.put("command", LOGIN);
 			}
-			System.out.println(msg);
+			// System.out.println(msg);
 			outWriter.println(msg);
 		} catch (IOException e) {
 			System.out.println(e);
@@ -79,11 +93,11 @@ public class ClientSkeleton extends Thread {
 	@SuppressWarnings("unchecked")
 	public void sendActivityObject(JSONObject activityObj) {
 		JSONObject msg = new JSONObject();
-		msg.put("command", "ACTIVITY_MESSAGE");
+		msg.put("command", ACTIVITY_MESSAGE);
 		msg.put("username", Settings.getUsername());
 		msg.put("secret", Settings.getSecret());
 		msg.put("activity", activityObj);
-		System.out.println(msg);
+		// System.out.println(msg);
 		outWriter.println(msg);
 	}
 
@@ -98,7 +112,7 @@ public class ClientSkeleton extends Thread {
 	@SuppressWarnings("unchecked")
 	public void disconnect() {
 		JSONObject msg = new JSONObject();
-		msg.put("command", "LOGOUT");
+		msg.put("command", LOGOUT);
 		outWriter.println(msg.toJSONString());
 		try {
 			inReader.close();
@@ -111,7 +125,7 @@ public class ClientSkeleton extends Thread {
 
 	// Process all incoming message from server
 	public void run() {
-		System.out.println(serverSocket.getInetAddress());
+		// System.out.println(serverSocket.getInetAddress());
 		try {
 			JSONObject json;
 			String data;
@@ -119,12 +133,21 @@ public class ClientSkeleton extends Thread {
 				try {
 					json = (JSONObject) parser.parse(data);
 					if (checkMessageIntegrity(json)) {
-						textFrame.setOutputText(json);
 						System.out.println(data);
-						if (json.get("command").toString() == "REDIRECT") {
-							if (!reconnect(json)) {
-								System.exit(0);
-							}
+						switch (json.get("command").toString()) {
+						case ACTIVITY_BROADCAST:
+							textFrame.setOutputText(json);
+						case REDIRECT:
+							if (!reconnect(json))
+								System.exit(-1);
+						case LOGIN_FAILED:
+							System.exit(-1);
+						case REGISTER_FAILED:
+							System.exit(-1);
+						case INVALID_MESSAGE:
+							System.exit(-1);
+						default:
+							//Do nothing
 						}
 					}
 				} catch (ParseException pe) {
@@ -155,35 +178,35 @@ public class ClientSkeleton extends Thread {
 	private boolean checkMessageIntegrity(JSONObject response) {
 		if (response.get("command") != null) {
 			switch (response.get("command").toString()) {
-			case ("REDIRECT"): {
+			case REDIRECT:
 				if (response.get("hostname") != null && response.get("port") != null) {
 					return true;
 				} else {
 					return false;
 				}
-			}
-			case("LOGIN_SUCCESS"):{
+
+			case LOGIN_SUCCESS:
 				if (response.get("info") != null) {
 					return true;
 				} else {
 					return false;
 				}
-			}
-			case ("LOGIN_FAILED"): {
+
+			case LOGIN_FAILED:
 				if (response.get("info") != null) {
 					return true;
 				} else {
 					return false;
 				}
-			}
-			case ("ACTIVITY_BROADCAST"): {
+
+			case ACTIVITY_BROADCAST:
 				if (response.get("activity") != null) {
 					return true;
 				} else {
 					return false;
 				}
-			}
-			case ("REGISTER_SUCCESS"): {
+
+			case REGISTER_SUCCESS:
 				if (response.get("info") != null) {
 					JSONObject login = new JSONObject();
 					login.put("command", "LOGIN");
@@ -194,14 +217,14 @@ public class ClientSkeleton extends Thread {
 				} else {
 					return false;
 				}
-			}
-			case ("REGISTER_FAILED"): {
+
+			case REGISTER_FAILED:
 				if (response.get("info") != null) {
 					return true;
 				} else {
 					return false;
 				}
-			}
+
 			}
 		}
 		return false;
