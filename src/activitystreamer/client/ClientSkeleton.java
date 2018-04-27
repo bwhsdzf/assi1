@@ -77,11 +77,13 @@ public class ClientSkeleton extends Thread {
 
 	@SuppressWarnings("unchecked")
 	public void sendActivityObject(JSONObject activityObj) {
-
-		activityObj.put("command", "ACTIVITY_MESSAGE");
-		activityObj.put("username", Settings.getUsername());
-		activityObj.put("secret", Settings.getSecret());
-		outWriter.println(activityObj);
+		JSONObject msg = new JSONObject();
+		
+		msg.put("command", "ACTIVITY_MESSAGE");
+		msg.put("username", Settings.getUsername());
+		msg.put("secret", Settings.getSecret());
+		msg.put("activity", activityObj);
+		outWriter.println(msg);
 	}
 
 	private void createConnection(String remoteHost, int remotePort) throws UnknownHostException, IOException {
@@ -92,6 +94,7 @@ public class ClientSkeleton extends Thread {
 		outWriter = new PrintWriter(outStream, true);
 	}
 
+	@SuppressWarnings("unchecked")
 	public void disconnect() {
 		JSONObject msg = new JSONObject();
 		msg.put("command", "LOGOUT");
@@ -116,7 +119,7 @@ public class ClientSkeleton extends Thread {
 					if (checkMessageIntegrity(json)) {
 						textFrame.setOutputText(json);
 						System.out.println(data);
-						if (json.get("command") == "REDIRECT") {
+						if (json.get("command").toString() == "REDIRECT") {
 							if (!reconnect(json)) {
 								System.exit(0);
 							}
@@ -146,11 +149,19 @@ public class ClientSkeleton extends Thread {
 	}
 
 	// Used to check the integrity of the server response, true if consistent
+	@SuppressWarnings("unchecked")
 	private boolean checkMessageIntegrity(JSONObject response) {
 		if (response.get("command") != null) {
 			switch (response.get("command").toString()) {
 			case ("REDIRECT"): {
-				if (response.get("hostname") != null & response.get("port") != null) {
+				if (response.get("hostname") != null && response.get("port") != null) {
+					return true;
+				} else {
+					return false;
+				}
+			}
+			case("LOGIN_SUCCESS"):{
+				if (response.get("info") != null) {
 					return true;
 				} else {
 					return false;
@@ -165,6 +176,18 @@ public class ClientSkeleton extends Thread {
 			}
 			case ("ACTIVITY_BROADCAST"): {
 				if (response.get("activity") != null) {
+					return true;
+				} else {
+					return false;
+				}
+			}
+			case ("REGISTER_SUCCESS"): {
+				if (response.get("info") != null) {
+					JSONObject login = new JSONObject();
+					login.put("command", "LOGIN");
+					login.put("username", Settings.getUsername());
+					login.put("secret", Settings.getSecret());
+					outWriter.println(login);
 					return true;
 				} else {
 					return false;
