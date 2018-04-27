@@ -60,7 +60,7 @@ public class Connection extends Thread {
 	 */
 	public boolean writeMsg(String msg) {
 		if (open) {
-			System.out.println(msg);
+			System.out.println("sending " +msg);
 			outwriter.println(msg);
 			outwriter.flush();
 			return true;
@@ -86,6 +86,7 @@ public class Connection extends Thread {
 		try {
 			String data;
 			while (!term && (data = inreader.readLine()) != null) {
+				System.out.println("Receving " +data);
 				term = Control.getInstance().process(this, data);
 			}
 			log.debug("connection closed to " + Settings.socketAddress(socket));

@@ -9,6 +9,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 
 import activitystreamer.util.Settings;
@@ -65,6 +66,8 @@ public class Control extends Thread {
 
 	protected static Control control = null;
 
+	private JsonParser parser = new JsonParser();
+
 	public static Control getInstance() {
 		if (control == null) {
 			control = new Control();
@@ -85,6 +88,7 @@ public class Control extends Thread {
 		// start a listener
 		try {
 			listener = new Listener();
+			initiateConnection();
 		} catch (IOException e1) {
 			log.fatal("failed to startup a listening thread: " + e1);
 			System.exit(-1);
@@ -110,8 +114,11 @@ public class Control extends Thread {
 	 */
 	public synchronized boolean process(Connection con, String msg) {
 		JsonObject receivedMSG;
+
 		try {
-			receivedMSG = new Gson().fromJson(msg, JsonObject.class);
+
+			receivedMSG = parser.parse(msg).getAsJsonObject();
+			System.out.println("string to json " + receivedMSG);
 		} catch (JsonSyntaxException e) {
 			return true;
 		}
@@ -142,6 +149,8 @@ public class Control extends Thread {
 			return !broadcast(con, receivedMSG);
 		case ACTIVITY_MESSAGE:
 			return !broadcast(con, receivedMSG);
+		case AUTHENTICATION_FAIL:
+			return false;
 		default:
 			return false;
 		}
@@ -176,10 +185,16 @@ public class Control extends Thread {
 	 * A new outgoing connection has been established, and a reference is returned
 	 * to it
 	 */
+	@SuppressWarnings("unchecked")
 	public synchronized Connection outgoingConnection(Socket s) throws IOException {
 		log.debug("outgoing connection: " + Settings.socketAddress(s));
 		Connection c = new Connection(s);
 		connections.add(c);
+		broadConnections.add(c);
+		JSONObject msg = new JSONObject();
+		msg.put("command", AUTHENTICATE);
+		msg.put("secret", Settings.getSecret());
+		c.writeMsg(msg.toJSONString());
 		return c;
 
 	}
@@ -219,8 +234,9 @@ public class Control extends Thread {
 
 			// Otherwise is a stand alone server, register success
 			else {
+				userInfo.put(username, secret);
 				regist.put("command", REGISTER_SUCCESS);
-				regist.put("info", "register successful for  " + username);
+				regist.put("info", "register successful for " + username);
 				con.writeMsg(regist.toJSONString());
 				return true;
 			}
@@ -243,10 +259,12 @@ public class Control extends Thread {
 			return false;
 		}
 		String username = receivedMSG.get("username").getAsString();
+		String secret = receivedMSG.get("secret").getAsString();
 		if (receivedMSG.get("command").getAsString() == LOCK_ALLOWED) {
 			int n = registerList1.get(username) + 1;
 			registerList1.put(username, n);
 			if (n == broadConnections.size()) {
+				userInfo.put(username, secret);
 				JSONObject response = new JSONObject();
 				response.put("command", REGISTER_SUCCESS);
 				response.put("info", "register successful for  " + username);
@@ -318,6 +336,7 @@ public class Control extends Thread {
 		// If the user login as anoneymous or has right name and secret
 		// then send login success and check if need to redirect
 		if ((username.equals(ANONYMOUS_USERNAME) && secret == null) || userInfo.get(username).equals(secret)) {
+
 			command = LOGIN_SUCCESS;
 			login.put("command", command);
 			login.put("info", "logged in as user " + username);
@@ -327,17 +346,21 @@ public class Control extends Thread {
 			}
 			con.setUsername(username);
 			con.setSecret(secret);
-
-			for (JsonObject info : serverInfo.values()) {
-				String hostname = info.get("hostname").toString();
-				int load = info.get("load").getAsInt();
-				int port = info.get("port").getAsInt();
-				if (load + 2 < currentLoad) {
-					login.put("command", REDIRECT);
-					login.put("hostname", hostname);
-					login.put("port", port);
-					con.closeCon();
-					return false;
+			con.writeMsg(login.toJSONString());
+			if (!serverInfo.isEmpty()) {
+				for (JsonObject info : serverInfo.values()) {
+					JSONObject redirect = new JSONObject();
+					String hostname = info.get("hostname").toString();
+					int load = info.get("load").getAsInt();
+					int port = info.get("port").getAsInt();
+					if (load + 2 < currentLoad) {
+						redirect.put("command", REDIRECT);
+						redirect.put("hostname", hostname);
+						redirect.put("port", port);
+						con.writeMsg(redirect.toJSONString());
+						con.closeCon();
+						return false;
+					}
 				}
 			}
 		}
@@ -523,21 +546,21 @@ public class Control extends Thread {
 	 */
 	private boolean checkMsgIntegrity(Connection con, JsonObject json) {
 		InvalidMessage response = new InvalidMessage();
-		System.out.println(json);
-		if (json.get("command") != null) {
+		if (json.get("command") == null) {
 			response.setInfo("No command");
+			con.writeMsg(response.toJsonString());
 			return false;
 		}
 		switch (json.get("command").getAsString()) {
 		case LOGIN:
-			if (json.get("username") != null) {
+			if (json.get("username") == null) {
 				response.setInfo("Not providing correct username");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case REGISTER:
-			if (json.get("username") != null && json.get("secret") != null) {
+			if (json.get("username") == null || json.get("secret") == null) {
 				response.setInfo("Not providing correct username or secret");
 				con.writeMsg(response.toJsonString());
 				return false;
@@ -551,46 +574,48 @@ public class Control extends Thread {
 			}
 			return true;
 		case ACTIVITY_MESSAGE:
-			if (json.get("username") != null && json.get("activity") != null) {
+			if (json.get("username") == null || json.get("activity") == null) {
 				response.setInfo("Activity message not complete");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case SERVER_ANNOUNCE:
-			if (json.get("hostname") != null && json.get("port") != null && json.get("load") != null) {
+			if (json.get("hostname") == null || json.get("port") == null || json.get("load") == null) {
 				response.setInfo("Not providing correct server info");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case ACTIVITY_BROADCAST:
-			if (json.get("activity") != null) {
+			if (json.get("activity") == null) {
 				response.setInfo("No activity");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case LOCK_REQUEST:
-			if (json.get("username") != null && json.get("secret") != null) {
+			if (json.get("username") == null || json.get("secret") == null) {
 				response.setInfo("Not providing username or secret correctly");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case LOCK_ALLOWED:
-			if (json.get("username") != null && json.get("secret") != null) {
+			if (json.get("username") == null || json.get("secret") == null) {
 				response.setInfo("Not providing username or secret correctly");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case LOCK_DENIED:
-			if (json.get("username") != null && json.get("secret") != null) {
+			if (json.get("username") == null || json.get("secret") == null) {
 				response.setInfo("Not providing username or secret correctly");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
+			return true;
+		case LOGOUT:
 			return true;
 		default:
 			response.setInfo("No such command");

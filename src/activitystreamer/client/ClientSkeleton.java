@@ -65,6 +65,7 @@ public class ClientSkeleton extends Thread {
 				// Login
 				msg.put("command", "LOGIN");
 			}
+			System.out.println(msg);
 			outWriter.println(msg);
 		} catch (IOException e) {
 			System.out.println(e);
@@ -77,11 +78,13 @@ public class ClientSkeleton extends Thread {
 
 	@SuppressWarnings("unchecked")
 	public void sendActivityObject(JSONObject activityObj) {
-
-		activityObj.put("command", "ACTIVITY_MESSAGE");
-		activityObj.put("username", Settings.getUsername());
-		activityObj.put("secret", Settings.getSecret());
-		outWriter.println(activityObj);
+		JSONObject msg = new JSONObject();
+		msg.put("command", "ACTIVITY_MESSAGE");
+		msg.put("username", Settings.getUsername());
+		msg.put("secret", Settings.getSecret());
+		msg.put("activity", activityObj);
+		System.out.println(msg);
+		outWriter.println(msg);
 	}
 
 	private void createConnection(String remoteHost, int remotePort) throws UnknownHostException, IOException {
@@ -107,6 +110,7 @@ public class ClientSkeleton extends Thread {
 
 	// Process all incoming message from server
 	public void run() {
+		System.out.println(serverSocket.getInetAddress());
 		try {
 			JSONObject json;
 			String data;
