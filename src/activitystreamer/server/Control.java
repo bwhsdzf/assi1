@@ -128,7 +128,7 @@ public class Control extends Thread {
 		} catch (JsonSyntaxException e) {
 			return true;
 		}
-
+		try {
 		// Check the integrity of the message
 		if (!checkMsgIntegrity(con, receivedMSG)) {
 			con.closeCon();
@@ -166,7 +166,13 @@ public class Control extends Thread {
 		default:
 			return false;
 		}
-	}
+		}catch (NullPointerException e) {
+			InvalidMessage invalid = new InvalidMessage();
+			invalid.setInfo("Not enough info in message");
+			con.writeMsg(invalid.toJsonString());
+		}
+		return false;
+	} 
 
 	/*
 	 * The connection has been closed by the other party.
@@ -220,7 +226,7 @@ public class Control extends Thread {
 	 * @return True if register successful, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean register(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean register(Connection con, JsonObject receivedMSG) throws NullPointerException{
 		JSONObject regist = new JSONObject();
 		String secret = receivedMSG.get("secret").getAsString();
 		String username = receivedMSG.get("username").getAsString();
@@ -271,7 +277,7 @@ public class Control extends Thread {
 	 * @return True if register successful, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean lockProcess(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean lockProcess(Connection con, JsonObject receivedMSG) throws NullPointerException{
 		// Check if the message source is authenticated
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
@@ -294,19 +300,21 @@ public class Control extends Thread {
 		}
 
 		if (receivedMSG.get("command").getAsString().equals(LOCK_ALLOWED)) {
-			int n = registerList1.get(username) + 1;
-			registerList1.put(username, n);
-			// If the number of allow reaches the number of connected server
-			// send register success
-			if (n == serverInfo.size()) {
-				userInfo.put(username, secret);
-				JSONObject response = new JSONObject();
-				response.put("command", REGISTER_SUCCESS);
-				response.put("info", "register successful for  " + username);
-				registerList2.get(username).writeMsg(response.toJSONString());
-				registerList1.remove(username);
-				registerList2.remove(username);
-				return true;
+			if (registerList1.containsKey(username)) {
+				int n = registerList1.get(username) + 1;
+				registerList1.put(username, n);
+				// If the number of allow reaches the number of connected server
+				// send register success
+				if (n == serverInfo.size()) {
+					userInfo.put(username, secret);
+					JSONObject response = new JSONObject();
+					response.put("command", REGISTER_SUCCESS);
+					response.put("info", "register successful for  " + username);
+					registerList2.get(username).writeMsg(response.toJSONString());
+					registerList1.remove(username);
+					registerList2.remove(username);
+					return true;
+				}
 			}
 
 		}
@@ -334,7 +342,7 @@ public class Control extends Thread {
 	 * @return True if the message source is authenticated, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean lockRequest(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean lockRequest(Connection con, JsonObject receivedMSG) throws NullPointerException{
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated server");
@@ -384,7 +392,7 @@ public class Control extends Thread {
 	 * @return True if login successful, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean login(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean login(Connection con, JsonObject receivedMSG) throws NullPointerException{
 		JSONObject login = new JSONObject();
 		String command;
 		String secret = receivedMSG.get("secret").getAsString();
@@ -446,7 +454,7 @@ public class Control extends Thread {
 	 * @return True if authenticate success, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean auth(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean auth(Connection con, JsonObject receivedMSG) throws NullPointerException{
 		JSONObject auth = new JSONObject();
 		String command;
 		String info;
@@ -480,7 +488,7 @@ public class Control extends Thread {
 	 * @param receivedMSG
 	 * @return True if process successfully, false otherwise
 	 */
-	private synchronized boolean announce(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean announce(Connection con, JsonObject receivedMSG) throws NullPointerException{
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated server");
@@ -507,7 +515,7 @@ public class Control extends Thread {
 	 * @return True if the message source is authenticated, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean broadcast(Connection con, JsonObject receivedMSG) {
+	private synchronized boolean broadcast(Connection con, JsonObject receivedMSG) throws NullPointerException{
 		if (!loadConnections.contains(con) && !broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated connection");
@@ -529,7 +537,7 @@ public class Control extends Thread {
 				actObj.addProperty("authenticated_user", username);
 				response.put("activity", actObj);
 				for (Connection connection : connections) {
-						connection.writeMsg(response.toJSONString());
+					connection.writeMsg(response.toJSONString());
 				}
 				return true;
 			} else {
@@ -565,7 +573,7 @@ public class Control extends Thread {
 				break;
 			}
 			if (!term) {
-				//log.debug("doing activity");
+				// log.debug("doing activity");
 				term = doActivity();
 			}
 
@@ -621,7 +629,7 @@ public class Control extends Thread {
 	 *            The connection from which the message came
 	 * @return true if the message is integrate, false otherwise.
 	 */
-	private boolean checkMsgIntegrity(Connection con, JsonObject json) {
+	private boolean checkMsgIntegrity(Connection con, JsonObject json)  throws NullPointerException{
 		InvalidMessage response = new InvalidMessage();
 		if (json.get("command") == null) {
 			response.setInfo("No command");
@@ -659,7 +667,7 @@ public class Control extends Thread {
 			return true;
 		case SERVER_ANNOUNCE:
 			if (json.get("hostname") == null || json.get("port") == null || json.get("load") == null
-			|| json.get("id") == null) {
+					|| json.get("id") == null) {
 				response.setInfo("Not providing correct server info");
 				con.writeMsg(response.toJsonString());
 				return false;
