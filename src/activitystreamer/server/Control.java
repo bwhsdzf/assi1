@@ -129,50 +129,51 @@ public class Control extends Thread {
 			return true;
 		}
 		try {
-		// Check the integrity of the message
-		if (!checkMsgIntegrity(con, receivedMSG)) {
-			con.closeCon();
-			return false;
-		}
-		String message = receivedMSG.get("command").getAsString();
-		switch (message) {
-		case REGISTER:
-			return !register(con, receivedMSG);
-		case LOGIN:
-			return !login(con, receivedMSG);
-		case AUTHENTICATE:
-			return !auth(con, receivedMSG);
-		case INVALID_MESSAGE:
-			con.closeCon();
-			return false;
-		case SERVER_ANNOUNCE:
-			return !announce(con, receivedMSG);
-		case LOGOUT:
-			con.closeCon();
-			return false;
-		case LOCK_REQUEST:
-			return !lockRequest(con, receivedMSG);
-		case LOCK_DENIED:
-			return !lockProcess(con, receivedMSG);
-		case LOCK_ALLOWED:
-			return !lockProcess(con, receivedMSG);
-		case ACTIVITY_BROADCAST:
-			return !broadcast(con, receivedMSG);
-		case ACTIVITY_MESSAGE:
-			return !broadcast(con, receivedMSG);
-		case AUTHENTICATION_FAIL:
-			con.closeCon();
-			return false;
-		default:
-			return false;
-		}
-		}catch (NullPointerException e) {
+			// Check the integrity of the message
+			if (!checkMsgIntegrity(con, receivedMSG)) {
+				con.closeCon();
+				return false;
+			}
+			String message = receivedMSG.get("command").getAsString();
+			switch (message) {
+			case REGISTER:
+				return !register(con, receivedMSG);
+			case LOGIN:
+				return !login(con, receivedMSG);
+			case AUTHENTICATE:
+				return !auth(con, receivedMSG);
+			case INVALID_MESSAGE:
+				con.closeCon();
+				return false;
+			case SERVER_ANNOUNCE:
+				return !announce(con, receivedMSG);
+			case LOGOUT:
+				con.closeCon();
+				return false;
+			case LOCK_REQUEST:
+				return !lockRequest(con, receivedMSG);
+			case LOCK_DENIED:
+				return !lockProcess(con, receivedMSG);
+			case LOCK_ALLOWED:
+				return !lockProcess(con, receivedMSG);
+			case ACTIVITY_BROADCAST:
+				return !broadcast(con, receivedMSG);
+			case ACTIVITY_MESSAGE:
+				return !broadcast(con, receivedMSG);
+			case AUTHENTICATION_FAIL:
+				con.closeCon();
+				return false;
+			default:
+				return false;
+			}
+		} catch (NullPointerException e) {
+			e.printStackTrace();
 			InvalidMessage invalid = new InvalidMessage();
-			invalid.setInfo("Not enough info in message");
+			invalid.setInfo("Not enough info in message," + " possibly no authenticated user in ACTIVITY_BROADCAST ?");
 			con.writeMsg(invalid.toJsonString());
 		}
 		return false;
-	} 
+	}
 
 	/*
 	 * The connection has been closed by the other party.
@@ -226,7 +227,7 @@ public class Control extends Thread {
 	 * @return True if register successful, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean register(Connection con, JsonObject receivedMSG) throws NullPointerException{
+	private synchronized boolean register(Connection con, JsonObject receivedMSG) throws NullPointerException {
 		JSONObject regist = new JSONObject();
 		String secret = receivedMSG.get("secret").getAsString();
 		String username = receivedMSG.get("username").getAsString();
@@ -277,7 +278,7 @@ public class Control extends Thread {
 	 * @return True if register successful, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean lockProcess(Connection con, JsonObject receivedMSG) throws NullPointerException{
+	private synchronized boolean lockProcess(Connection con, JsonObject receivedMSG) throws NullPointerException {
 		// Check if the message source is authenticated
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
@@ -342,7 +343,7 @@ public class Control extends Thread {
 	 * @return True if the message source is authenticated, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean lockRequest(Connection con, JsonObject receivedMSG) throws NullPointerException{
+	private synchronized boolean lockRequest(Connection con, JsonObject receivedMSG) throws NullPointerException {
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated server");
@@ -392,10 +393,12 @@ public class Control extends Thread {
 	 * @return True if login successful, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean login(Connection con, JsonObject receivedMSG) throws NullPointerException{
+	private synchronized boolean login(Connection con, JsonObject receivedMSG) throws NullPointerException {
 		JSONObject login = new JSONObject();
 		String command;
-		String secret = receivedMSG.get("secret").getAsString();
+		String secret = null;
+		if (!receivedMSG.get("secret").isJsonNull())
+			secret = receivedMSG.get("secret").getAsString();
 		String username = receivedMSG.get("username").getAsString();
 		int currentLoad = loadConnections.size();
 
@@ -454,7 +457,7 @@ public class Control extends Thread {
 	 * @return True if authenticate success, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean auth(Connection con, JsonObject receivedMSG) throws NullPointerException{
+	private synchronized boolean auth(Connection con, JsonObject receivedMSG) throws NullPointerException {
 		JSONObject auth = new JSONObject();
 		String command;
 		String info;
@@ -488,7 +491,7 @@ public class Control extends Thread {
 	 * @param receivedMSG
 	 * @return True if process successfully, false otherwise
 	 */
-	private synchronized boolean announce(Connection con, JsonObject receivedMSG) throws NullPointerException{
+	private synchronized boolean announce(Connection con, JsonObject receivedMSG) throws NullPointerException {
 		if (!broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated server");
@@ -515,7 +518,7 @@ public class Control extends Thread {
 	 * @return True if the message source is authenticated, false otherwise
 	 */
 	@SuppressWarnings("unchecked")
-	private synchronized boolean broadcast(Connection con, JsonObject receivedMSG) throws NullPointerException{
+	private synchronized boolean broadcast(Connection con, JsonObject receivedMSG) throws NullPointerException {
 		if (!loadConnections.contains(con) && !broadConnections.contains(con)) {
 			InvalidMessage invalidMsg = new InvalidMessage();
 			invalidMsg.setInfo("Unanthenticated connection");
@@ -528,8 +531,11 @@ public class Control extends Thread {
 		JSONObject response = new JSONObject();
 		if (receivedMSG.get("command").getAsString().equals(ACTIVITY_MESSAGE)) {
 			String username = receivedMSG.get("username").getAsString();
-			String secret = receivedMSG.get("secret").getAsString();
-			if (con.getUsername().equals(username) && con.getSecret().equals(secret)) {
+
+			String secret = null;
+			if (!receivedMSG.get("secret").isJsonNull())
+				secret = receivedMSG.get("secret").getAsString();
+			if (secret == null || (con.getUsername().equals(username) && con.getSecret().equals(secret))) {
 				response.put("command", ACTIVITY_BROADCAST);
 
 				// Process the activity object
@@ -629,7 +635,7 @@ public class Control extends Thread {
 	 *            The connection from which the message came
 	 * @return true if the message is integrate, false otherwise.
 	 */
-	private boolean checkMsgIntegrity(Connection con, JsonObject json)  throws NullPointerException{
+	private boolean checkMsgIntegrity(Connection con, JsonObject json) throws NullPointerException {
 		InvalidMessage response = new InvalidMessage();
 		if (json.get("command") == null) {
 			response.setInfo("No command");
@@ -638,64 +644,64 @@ public class Control extends Thread {
 		}
 		switch (json.get("command").getAsString()) {
 		case LOGIN:
-			if (json.get("username") == null) {
+			if (json.get("username").isJsonNull()) {
 				response.setInfo("Not providing correct username");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case REGISTER:
-			if (json.get("username") == null || json.get("secret") == null) {
+			if (json.get("username").isJsonNull() || json.get("secret").isJsonNull()) {
 				response.setInfo("Not providing correct username or secret");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case AUTHENTICATE:
-			if (json.get("secret") == null) {
+			if (json.get("secret").isJsonNull()) {
 				response.setInfo("Not providing secret");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case ACTIVITY_MESSAGE:
-			if (json.get("username") == null || json.get("activity") == null) {
+			if (json.get("username").isJsonNull() || json.get("activity").isJsonNull()) {
 				response.setInfo("Activity message not complete");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case SERVER_ANNOUNCE:
-			if (json.get("hostname") == null || json.get("port") == null || json.get("load") == null
-					|| json.get("id") == null) {
+			if (json.get("hostname").isJsonNull() || json.get("port").isJsonNull() || json.get("load").isJsonNull()
+					|| json.get("id").isJsonNull()) {
 				response.setInfo("Not providing correct server info");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case ACTIVITY_BROADCAST:
-			if (json.get("activity") == null) {
+			if (json.get("activity").isJsonNull()) {
 				response.setInfo("No activity");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case LOCK_REQUEST:
-			if (json.get("username") == null || json.get("secret") == null) {
+			if (json.get("username").isJsonNull() || json.get("secret").isJsonNull()) {
 				response.setInfo("Not providing username or secret correctly");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case LOCK_ALLOWED:
-			if (json.get("username") == null || json.get("secret") == null) {
+			if (json.get("username").isJsonNull() || json.get("secret").isJsonNull()) {
 				response.setInfo("Not providing username or secret correctly");
 				con.writeMsg(response.toJsonString());
 				return false;
 			}
 			return true;
 		case LOCK_DENIED:
-			if (json.get("username") == null || json.get("secret") == null) {
+			if (json.get("username").isJsonNull() || json.get("secret").isJsonNull()) {
 				response.setInfo("Not providing username or secret correctly");
 				con.writeMsg(response.toJsonString());
 				return false;

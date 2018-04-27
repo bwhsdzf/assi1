@@ -18,7 +18,6 @@ public class InputListener extends Thread{
 	
 	public void run() {
 		String inputStr;
-		JSONObject obj;
 		JSONParser parser = new JSONParser();
 		while (!(inputStr = sc.nextLine()).equals("exit")) {
 			try {

@@ -31,7 +31,7 @@ public class ClientSkeleton extends Thread {
 	private InputListener inListener;
 
 	private boolean isNewUser = false;
-	
+
 	private final static String LOGIN = "LOGIN";
 	private final static String LOGIN_SUCCESS = "LOGIN_SUCCESS";
 	private final static String LOGIN_FAILED = "LOGIN_FAILED";
@@ -79,7 +79,7 @@ public class ClientSkeleton extends Thread {
 				// Login
 				msg.put("command", LOGIN);
 			}
-		 // System.out.println(msg);
+			// System.out.println(msg);
 			outWriter.println(msg);
 		} catch (IOException e) {
 			System.out.println(e);
@@ -139,9 +139,10 @@ public class ClientSkeleton extends Thread {
 							textFrame.setOutputText(json);
 							continue;
 						case REDIRECT:
-							if(!reconnect(json))
+							if (!reconnect(json))
 								System.exit(-1);
-							else continue;
+							else
+								continue;
 						case LOGIN_FAILED:
 							System.exit(-1);
 						case REGISTER_FAILED:
@@ -149,7 +150,7 @@ public class ClientSkeleton extends Thread {
 						case INVALID_MESSAGE:
 							System.exit(-1);
 						default:
-							//Do nothing
+							// Do nothing
 							continue;
 						}
 					}
@@ -169,8 +170,7 @@ public class ClientSkeleton extends Thread {
 	@SuppressWarnings("unchecked")
 	private boolean reconnect(JSONObject response) {
 		Settings.setRemoteHostname(response.get("hostname").toString());
-		
-		
+
 		Settings.setRemotePort(Integer.parseInt(response.get("port").toString()));
 		try {
 			createConnection(Settings.getRemoteHostname(), Settings.getRemotePort());
@@ -257,7 +257,7 @@ public class ClientSkeleton extends Thread {
 			default:
 				invalidMsg.put("info", "No  valid command");
 				outWriter.println(invalidMsg);
-				
+
 			}
 		}
 		return false;
