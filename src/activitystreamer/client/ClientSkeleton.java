@@ -31,7 +31,7 @@ public class ClientSkeleton extends Thread {
 	private InputListener inListener;
 
 	private boolean isNewUser = false;
-
+	
 	private final static String LOGIN = "LOGIN";
 	private final static String LOGIN_SUCCESS = "LOGIN_SUCCESS";
 	private final static String LOGIN_FAILED = "LOGIN_FAILED";
@@ -79,7 +79,7 @@ public class ClientSkeleton extends Thread {
 				// Login
 				msg.put("command", LOGIN);
 			}
-			// System.out.println(msg);
+		 // System.out.println(msg);
 			outWriter.println(msg);
 		} catch (IOException e) {
 			System.out.println(e);
@@ -98,7 +98,7 @@ public class ClientSkeleton extends Thread {
 		msg.put("secret", Settings.getSecret());
 		msg.put("activity", activityObj);
 		// System.out.println(msg);
-		outWriter.println(msg);
+		outWriter.println(msg.toJSONString());
 	}
 
 	private void createConnection(String remoteHost, int remotePort) throws UnknownHostException, IOException {
@@ -132,14 +132,16 @@ public class ClientSkeleton extends Thread {
 			while ((data = inReader.readLine()) != null) {
 				try {
 					json = (JSONObject) parser.parse(data);
+					System.out.println(data);
 					if (checkMessageIntegrity(json)) {
-						System.out.println(data);
 						switch (json.get("command").toString()) {
 						case ACTIVITY_BROADCAST:
 							textFrame.setOutputText(json);
+							continue;
 						case REDIRECT:
-							if (!reconnect(json))
+							if(!reconnect(json))
 								System.exit(-1);
+							else continue;
 						case LOGIN_FAILED:
 							System.exit(-1);
 						case REGISTER_FAILED:
@@ -148,6 +150,7 @@ public class ClientSkeleton extends Thread {
 							System.exit(-1);
 						default:
 							//Do nothing
+							continue;
 						}
 					}
 				} catch (ParseException pe) {
@@ -157,53 +160,70 @@ public class ClientSkeleton extends Thread {
 		} catch (IOException e) {
 			log.error("connection closed with exception: " + e);
 		}
+		System.exit(0);
 
 	}
 
 	// Reconnect to other server with provided info, return true if
 	// create success
+	@SuppressWarnings("unchecked")
 	private boolean reconnect(JSONObject response) {
 		Settings.setRemoteHostname(response.get("hostname").toString());
-		Settings.setRemotePort((Integer) response.get("port"));
+		
+		
+		Settings.setRemotePort(Integer.parseInt(response.get("port").toString()));
 		try {
 			createConnection(Settings.getRemoteHostname(), Settings.getRemotePort());
+			JSONObject msg = new JSONObject();
+			msg.put("command", LOGIN);
+			msg.put("username", Settings.getUsername());
+			msg.put("secret", Settings.getSecret());
+			outWriter.println(msg.toJSONString());
 		} catch (IOException e) {
 			System.out.println("Unable to create socket");
 		}
-		return (serverSocket == null);
+		return (serverSocket != null);
 	}
 
 	// Used to check the integrity of the server response, true if consistent
 	@SuppressWarnings("unchecked")
 	private boolean checkMessageIntegrity(JSONObject response) {
 		if (response.get("command") != null) {
+			JSONObject invalidMsg = new JSONObject();
+			invalidMsg.put("command", INVALID_MESSAGE);
 			switch (response.get("command").toString()) {
 			case REDIRECT:
 				if (response.get("hostname") != null && response.get("port") != null) {
 					return true;
 				} else {
-					return false;
+					System.out.println("Not enough info to redirect");
+					System.exit(-1);
 				}
 
 			case LOGIN_SUCCESS:
 				if (response.get("info") != null) {
 					return true;
 				} else {
-					return false;
+					invalidMsg.put("info", "No info provided");
+					outWriter.println(invalidMsg);
+					System.exit(-1);
 				}
 
 			case LOGIN_FAILED:
 				if (response.get("info") != null) {
 					return true;
 				} else {
-					return false;
+					System.out.println("Error, no info in message");
+					System.exit(-1);
 				}
 
 			case ACTIVITY_BROADCAST:
 				if (response.get("activity") != null) {
 					return true;
 				} else {
-					return false;
+					invalidMsg.put("info", "No activity message");
+					outWriter.println(invalidMsg);
+					System.exit(-1);
 				}
 
 			case REGISTER_SUCCESS:
@@ -215,16 +235,29 @@ public class ClientSkeleton extends Thread {
 					outWriter.println(login);
 					return true;
 				} else {
-					return false;
+					invalidMsg.put("info", "No info provided");
+					outWriter.println(invalidMsg);
+					System.exit(-1);
 				}
 
 			case REGISTER_FAILED:
 				if (response.get("info") != null) {
 					return true;
 				} else {
-					return false;
+					System.out.println("Error, no info in message");
+					System.exit(-1);
 				}
-
+			case AUTHENTICATION_FAIL:
+				if (response.get("info") != null) {
+					return true;
+				} else {
+					System.out.println("Error, no info in message");
+					System.exit(-1);
+				}
+			default:
+				invalidMsg.put("info", "No  valid command");
+				outWriter.println(invalidMsg);
+				
 			}
 		}
 		return false;

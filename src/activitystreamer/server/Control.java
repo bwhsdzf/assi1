@@ -40,7 +40,7 @@ public class Control extends Thread {
 	private static HashMap<String, String> userInfo = new HashMap<>();
 
 	// The server id
-	private String id = Settings.nextSecret().substring(0, 5);
+	private String id = Settings.nextSecret();
 
 	private final static String INVALID_MESSAGE = "INVALID_MESSAGE";
 	private final static String REGISTER = "REGISTER";
@@ -282,12 +282,23 @@ public class Control extends Thread {
 		String username = receivedMSG.get("username").getAsString();
 		String secret = receivedMSG.get("secret").getAsString();
 
+		// Broadcast message to all other servers except the source
+		for (Connection server : broadConnections) {
+			if (server != con) {
+
+				// If this is the server that asked for lock response from other server
+				// for the coming user name, stop broadcasting
+				if (!registerList1.containsKey(username))
+					server.writeMsg(receivedMSG.getAsString());
+			}
+		}
+
 		if (receivedMSG.get("command").getAsString().equals(LOCK_ALLOWED)) {
 			int n = registerList1.get(username) + 1;
 			registerList1.put(username, n);
 			// If the number of allow reaches the number of connected server
 			// send register success
-			if (n == broadConnections.size()) {
+			if (n == serverInfo.size()) {
 				userInfo.put(username, secret);
 				JSONObject response = new JSONObject();
 				response.put("command", REGISTER_SUCCESS);
@@ -307,6 +318,9 @@ public class Control extends Thread {
 			registerList2.get(username).writeMsg(response.toJSONString());
 			registerList1.remove(username);
 			registerList2.remove(username);
+			if (userInfo.containsKey(username) && userInfo.get("username").equals(secret)) {
+				userInfo.remove(username);
+			}
 		}
 		return true;
 	}
@@ -331,6 +345,12 @@ public class Control extends Thread {
 		String secret = receivedMSG.get("secret").getAsString();
 		JSONObject response = new JSONObject();
 
+		for (Connection server : broadConnections) {
+			if (server != con) {
+				server.writeMsg(receivedMSG.getAsString());
+			}
+		}
+
 		// If the user name does not exist in local database
 		// store it now
 		if (!userInfo.containsKey(username)) {
@@ -338,14 +358,19 @@ public class Control extends Thread {
 			response.put("username", username);
 			response.put("secret", secret);
 			userInfo.put(username, secret);
-			con.writeMsg(response.toJSONString());
+			for (Connection server : broadConnections) {
+				server.writeMsg(response.toJSONString());
+			}
+
 			return true;
 		}
 		// Otherwise return lock denied
 		response.put("command", LOCK_DENIED);
 		response.put("username", username);
 		response.put("secret", secret);
-		con.writeMsg(response.toJSONString());
+		for (Connection server : broadConnections) {
+			server.writeMsg(response.toJSONString());
+		}
 		return true;
 	}
 
@@ -462,8 +487,8 @@ public class Control extends Thread {
 			con.writeMsg(invalidMsg.toJsonString());
 			return false;
 		}
-		
-		//Broadcast announcement to other servers
+
+		// Broadcast announcement to other servers
 		for (Connection server : broadConnections) {
 			if (con != server) {
 				server.writeMsg(receivedMSG.getAsString());
@@ -498,9 +523,12 @@ public class Control extends Thread {
 			String secret = receivedMSG.get("secret").getAsString();
 			if (con.getUsername().equals(username) && con.getSecret().equals(secret)) {
 				response.put("command", ACTIVITY_BROADCAST);
-				response.put("activity", receivedMSG.get("activity").getAsJsonObject());
+
+				// Process the activity object
+				JsonObject actObj = receivedMSG.get("activity").getAsJsonObject();
+				actObj.addProperty("authenticated_user", username);
+				response.put("activity", actObj);
 				for (Connection connection : connections) {
-					if (connection != con)
 						connection.writeMsg(response.toJSONString());
 				}
 				return true;
@@ -512,7 +540,9 @@ public class Control extends Thread {
 			}
 		} else if (receivedMSG.get("command").getAsString().equals(ACTIVITY_BROADCAST)) {
 			response.put("command", ACTIVITY_BROADCAST);
-			response.put("activity", receivedMSG.get("activity").getAsJsonObject());
+			JsonObject actObj = receivedMSG.get("activity").getAsJsonObject();
+			actObj.addProperty("authenticated_user", actObj.get("authenticated_user").getAsString());
+			response.put("activity", actObj);
 			for (Connection connection : connections) {
 				if (connection != con)
 					connection.writeMsg(response.toJSONString());
@@ -535,7 +565,7 @@ public class Control extends Thread {
 				break;
 			}
 			if (!term) {
-				log.debug("doing activity");
+				//log.debug("doing activity");
 				term = doActivity();
 			}
 
@@ -563,7 +593,7 @@ public class Control extends Thread {
 	public synchronized boolean doActivity() {
 		JSONObject json = new JSONObject();
 		json.put("command", SERVER_ANNOUNCE);
-		json.put(id, Settings.getSecret());
+		json.put("id", id);
 		json.put("load", loadConnections.size());
 		json.put("hostname", Settings.getLocalHostname());
 		json.put("port", Settings.getLocalPort());
@@ -628,7 +658,8 @@ public class Control extends Thread {
 			}
 			return true;
 		case SERVER_ANNOUNCE:
-			if (json.get("hostname") == null || json.get("port") == null || json.get("load") == null) {
+			if (json.get("hostname") == null || json.get("port") == null || json.get("load") == null
+			|| json.get("id") == null) {
 				response.setInfo("Not providing correct server info");
 				con.writeMsg(response.toJsonString());
 				return false;
@@ -664,9 +695,13 @@ public class Control extends Thread {
 			return true;
 		case LOGOUT:
 			return true;
+		case INVALID_MESSAGE:
+			con.closeCon();
+			return false;
 		default:
 			response.setInfo("No such command");
 			con.writeMsg(response.toJsonString());
+			con.closeCon();
 			return false;
 		}
 
