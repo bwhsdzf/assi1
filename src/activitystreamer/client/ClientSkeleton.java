@@ -57,7 +57,7 @@ public class ClientSkeleton extends Thread {
 	@SuppressWarnings("unchecked")
 	public ClientSkeleton() {
 
-		// If user has specified username but not secret then generate and print
+		// If user has specified user name but not secret then generate and print
 		if (Settings.getUsername() != "anonymous") {
 			if (Settings.getSecret() == null) {
 				Settings.setSecret(Settings.nextSecret());

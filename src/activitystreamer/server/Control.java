@@ -1,13 +1,10 @@
 package activitystreamer.server;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
@@ -321,14 +318,16 @@ public class Control extends Thread {
 		}
 		// If received lock denied, send register failed immediately
 		else if (receivedMSG.get("command").getAsString().equals(LOCK_DENIED)) {
-			JSONObject response = new JSONObject();
-			response.put("command", REGISTER_FAILED);
-			response.put("info", username + " is already register with the system");
-			registerList2.get(username).writeMsg(response.toJSONString());
-			registerList1.remove(username);
-			registerList2.remove(username);
-			if (userInfo.containsKey(username) && userInfo.get("username").equals(secret)) {
-				userInfo.remove(username);
+			if (registerList1.containsKey(username)) {
+				JSONObject response = new JSONObject();
+				response.put("command", REGISTER_FAILED);
+				response.put("info", username + " is already register with the system");
+				registerList2.get(username).writeMsg(response.toJSONString());
+				registerList1.remove(username);
+				registerList2.remove(username);
+				if (userInfo.containsKey(username) && userInfo.get("username").equals(secret)) {
+					userInfo.remove(username);
+				}
 			}
 		}
 		return true;
@@ -441,7 +440,7 @@ public class Control extends Thread {
 			login.put("command", command);
 			login.put("info", "attempt to login with wrong secret");
 			con.writeMsg(login.toJSONString());
-			return true;
+			return false;
 		}
 
 		return true;
