@@ -123,7 +123,7 @@ public class Control extends Thread {
 			return true;
 		}
 		if (!checkMsgIntegrity(con, receivedMSG)) {
-			return false;
+			con.closeCon();
 		}
 		String message = receivedMSG.get("command").getAsString();
 		switch (message) {
@@ -134,10 +134,12 @@ public class Control extends Thread {
 		case AUTHENTICATE:
 			return !auth(con, receivedMSG);
 		case INVALID_MESSAGE:
+			con.closeCon();
 			return false;
 		case SERVER_ANNOUNCE:
 			return !announce(con, receivedMSG);
 		case LOGOUT:
+			con.closeCon();
 			return false;
 		case LOCK_REQUEST:
 			return !lockRequest(con, receivedMSG);
@@ -150,6 +152,7 @@ public class Control extends Thread {
 		case ACTIVITY_MESSAGE:
 			return !broadcast(con, receivedMSG);
 		case AUTHENTICATION_FAIL:
+			con.closeCon();
 			return false;
 		default:
 			return false;
@@ -258,11 +261,13 @@ public class Control extends Thread {
 			con.writeMsg(invalidMsg.toJsonString());
 			return false;
 		}
+		System.out.println(receivedMSG.toString());
 		String username = receivedMSG.get("username").getAsString();
 		String secret = receivedMSG.get("secret").getAsString();
-		if (receivedMSG.get("command").getAsString() == LOCK_ALLOWED) {
+		if (receivedMSG.get("command").getAsString() .equals(LOCK_ALLOWED)) {
 			int n = registerList1.get(username) + 1;
 			registerList1.put(username, n);
+			System.out.print("n " + n + ", size "+ broadConnections.size());
 			if (n == broadConnections.size()) {
 				userInfo.put(username, secret);
 				JSONObject response = new JSONObject();
@@ -273,7 +278,7 @@ public class Control extends Thread {
 				registerList2.remove(username);
 				return true;
 			}
-		} else if (receivedMSG.get("command").getAsString() == LOCK_DENIED) {
+		} else if (receivedMSG.get("command").getAsString().equals(LOCK_DENIED)) {
 			JSONObject response = new JSONObject();
 			response.put("command", REGISTER_FAILED);
 			response.put("info", username + " is already register with the system");
@@ -307,6 +312,7 @@ public class Control extends Thread {
 			response.put("username", username);
 			response.put("secret", secret);
 			userInfo.put(username, secret);
+			con.writeMsg(response.toJSONString());
 			return true;
 		}
 		response.put("command", LOCK_DENIED);
@@ -335,14 +341,14 @@ public class Control extends Thread {
 
 		// If the user login as anoneymous or has right name and secret
 		// then send login success and check if need to redirect
-		if ((username.equals(ANONYMOUS_USERNAME) && secret == null) || userInfo.get(username).equals(secret)) {
+		if ((username.equals(ANONYMOUS_USERNAME) && secret == null) || (userInfo.containsKey(username)
+				&& userInfo.get(username).equals(secret)))  {
 
 			command = LOGIN_SUCCESS;
 			login.put("command", command);
 			login.put("info", "logged in as user " + username);
 			if (!loadConnections.contains(con)) {
 				loadConnections.add(con);
-
 			}
 			con.setUsername(username);
 			con.setSecret(secret);
@@ -440,13 +446,16 @@ public class Control extends Thread {
 			con.writeMsg(invalidMsg.toJsonString());
 			return false;
 		}
+		
+		System.out.println("Broadcasting");
+		
 		JSONObject response = new JSONObject();
-		if (receivedMSG.get("command").getAsString() == ACTIVITY_MESSAGE) {
+		if (receivedMSG.get("command").getAsString().equals(ACTIVITY_MESSAGE)) {
 			String username = receivedMSG.get("username").getAsString();
 			String secret = receivedMSG.get("secret").getAsString();
 			if (con.getUsername().equals(username) && con.getSecret().equals(secret)) {
 				response.put("command", ACTIVITY_BROADCAST);
-				response.put("activity", receivedMSG.get("activity").getAsString());
+				response.put("activity", receivedMSG.get("activity").getAsJsonObject());
 				for (Connection connection : connections) {
 					if (connection != con)
 						connection.writeMsg(response.toJSONString());
@@ -458,9 +467,9 @@ public class Control extends Thread {
 				con.writeMsg(response.toJSONString());
 				return false;
 			}
-		} else if (receivedMSG.get("command").getAsString() == ACTIVITY_BROADCAST) {
+		} else if (receivedMSG.get("command").getAsString().equals(ACTIVITY_BROADCAST)) {
 			response.put("command", ACTIVITY_BROADCAST);
-			response.put("activity", receivedMSG.get("activity").getAsString());
+			response.put("activity", receivedMSG.get("activity").getAsJsonObject());
 			for (Connection connection : connections) {
 				if (connection != con)
 					connection.writeMsg(response.toJSONString());
