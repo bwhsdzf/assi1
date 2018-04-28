@@ -84,7 +84,7 @@ public class Control extends Thread {
 		if (Settings.getSecret() == null) {
 			String secret = Settings.nextSecret();
 			Settings.setSecret(secret);
-			System.out.println("Using new secret: " + secret);
+			log.info("Using new secret: " + secret);
 		}
 		// start a listener
 		try {
@@ -418,15 +418,17 @@ public class Control extends Thread {
 
 			// Check for redirect
 			if (!serverInfo.isEmpty()) {
+				JSONObject redirect = new JSONObject();
+				redirect.put("command", REDIRECT);
 				for (JsonObject info : serverInfo.values()) {
-					JSONObject redirect = new JSONObject();
-					String hostname = info.get("hostname").toString();
+					String hostname = info.get("hostname").toString().replaceAll("\"", "");
+					//System.out.print("hostname is " + hostname);
 					int load = info.get("load").getAsInt();
 					int port = info.get("port").getAsInt();
 					if (load + 2 < currentLoad) {
-						redirect.put("command", REDIRECT);
 						redirect.put("hostname", hostname);
 						redirect.put("port", port);
+						System.out.println("redirecting to " + redirect);
 						con.writeMsg(redirect.toJSONString());
 						con.closeCon();
 						return false;
@@ -568,7 +570,7 @@ public class Control extends Thread {
 
 	@Override
 	public void run() {
-		log.info("using activity interval of " + Settings.getActivityInterval() + " milliseconds");
+		//log.info("using activity interval of " + Settings.getActivityInterval() + " milliseconds");
 		while (!term) {
 			// do something with 5 second intervals in between
 			try {
