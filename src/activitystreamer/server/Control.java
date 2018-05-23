@@ -117,6 +117,24 @@ public class Control extends Thread {
 			}
 		}
 	}
+	
+	public void reconnection() {
+		// NEED TO ADD MORE CODE FOR LEVEL ONE SERVER RECONNECTED TO BACKUP ROOT SERVER
+		//
+		//
+		//
+		//
+		//////////////////////////////////////////////////////////////////////////////
+		
+			try {
+				outgoingConnection(new Socket(Settings.getRemoteHostname(), Settings.getRemotePort()));
+			} catch (IOException e) {
+				log.error("failed to make connection to " + Settings.getRemoteHostname() + ":"
+						+ Settings.getRemotePort() + " :" + e);
+				System.exit(-1);
+			}
+		}
+	}
 
 	/*
 	 * Processing incoming messages from the connection. Return true if the
@@ -133,10 +151,10 @@ public class Control extends Thread {
 		}
 		try {
 			// Check the integrity of the message
-			if (!checkMsgIntegrity(con, receivedMSG)) {
+			/*if (!checkMsgIntegrity(con, receivedMSG)) {
 				con.closeCon();
 				return false;
-			}
+			}*/
 			String message = receivedMSG.get("command").getAsString();
 			switch (message) {
 			case REGISTER:
@@ -494,7 +512,11 @@ public class Control extends Thread {
 		auth.put("command", command);
 		auth.put("myhost", Settings.getLocalHostname());
 		auth.put("myport", Settings.getLocalPort());
-		auth.put("parenthost", Settings.getRemoteHostname());
+		if(Settings.getRemoteHostname()==null) {
+			auth.put("parenthost", "");
+		}
+		else
+			auth.put("parenthost", Settings.getRemoteHostname());
 		auth.put("parentport", Settings.getRemotePort());
 		con.writeMsg(auth.toJSONString());
 		broadConnections.add(con);
@@ -514,9 +536,11 @@ public class Control extends Thread {
 	@SuppressWarnings("unchecked")
 	private synchronized boolean authSuccess(Connection con, JsonObject receivedMSG) throws NullPointerException {
 		JSONObject json = new JSONObject();
-
+        
+		con.setIsParent(true);
 		parentHost = receivedMSG.get("parenthost").getAsString();
 		parentPort = receivedMSG.get("parentport").getAsInt();
+		System.out.print("hahahhahaha " + Boolean.toString(con.getIsParent()) + " " + parentHost + " "+ parentPort);
 
 		return true;
 
@@ -662,7 +686,7 @@ public class Control extends Thread {
 	public final ArrayList<Connection> getConnections() {
 		return connections;
 	}
-
+}
 	/**
 	 * Checks the integrity of coming message, whether they contain correct field
 	 * according to their command
@@ -673,7 +697,7 @@ public class Control extends Thread {
 	 *            The connection from which the message came
 	 * @return true if the message is integrate, false otherwise.
 	 */
-	private boolean checkMsgIntegrity(Connection con, JsonObject json) throws NullPointerException {
+	/*private boolean checkMsgIntegrity(Connection con, JsonObject json) throws NullPointerException {
 		InvalidMessage response = new InvalidMessage();
 		if (json.get("command") == null) {
 			response.setInfo("No command");
@@ -743,6 +767,11 @@ public class Control extends Thread {
 				response.setInfo("Not providing username or secret correctly");
 				con.writeMsg(response.toJsonString());
 				return false;
+	    case AUTHENTICATION_SUCCESS:
+				if (json.get("hostname").isJsonNull() || json.get("secret").isJsonNull()) {
+					response.setInfo("Not providing hostname or secret correctly");
+					con.writeMsg(response.toJsonString());
+					return false;
 			}
 			return true;
 		case LOGOUT:
@@ -758,4 +787,4 @@ public class Control extends Thread {
 		}
 
 	}
-}
+}*/
