@@ -22,6 +22,8 @@ public class Connection extends Thread {
 	private boolean open = false;
 	private Socket socket;
 	private boolean term = false;
+	
+	private boolean isParent = false;
 
 	
 	//Record the login state of the client connection
@@ -37,6 +39,7 @@ public class Connection extends Thread {
 		username = null;
 		secret = null;
 		open = true;
+		isParent = false;
 		start();
 	}
 
@@ -47,6 +50,9 @@ public class Connection extends Thread {
 	public void setSecret(String secret) {
 		this.secret = secret;
 	}
+	public void setIsParent(boolean isParent) {
+		this.isParent = isParent;
+	}
 
 	public String getUsername() {
 		return this.username;
@@ -54,6 +60,9 @@ public class Connection extends Thread {
 
 	public String getSecret() {
 		return this.secret;
+	}
+	public boolean getIsParent() {
+		return this.isParent;
 	}
 
 	/*
@@ -85,8 +94,11 @@ public class Connection extends Thread {
 
 	public void run() {
 		try {
-			String data;
-			while (!term && (data = inreader.readLine()) != null) {
+			String data = inreader.readLine();
+			while (!term ) {
+				if(data == null) {
+					
+				}
 				System.out.println(data);
 				term = Control.getInstance().process(this, data);
 			}
