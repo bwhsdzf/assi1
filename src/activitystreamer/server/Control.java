@@ -13,6 +13,11 @@ import activitystreamer.util.Settings;
 import org.json.simple.JSONObject;
 
 public class Control extends Thread {
+
+	//Reconnect info
+	private static String parentHost = "";
+	private static int parentPort = 0;
+
 	private static final Logger log = LogManager.getLogger();
 
 	private static ArrayList<Connection> connections;
@@ -57,8 +62,9 @@ public class Control extends Thread {
 	private final static String ACTIVITY_BROADCAST = "ACTIVITY_BROADCAST";
 	private final static String ACTIVITY_MESSAGE = "ACTIVITY_MESSAGE";
 
-	private final static String AUTHENTICATION_FAIL = "AUTHTENTICATION_FAIL";
 	private final static String AUTHENTICATE = "AUTHENTICATE";
+	private final static String AUTHENTICATION_SUCCESS = "AUTHENTICATION_SUCCESS";
+	private final static String AUTHENTICATION_FAIL = "AUTHTENTICATION_FAIL";
 
 	private final static String REDIRECT = "REDIRECT";
 	private final static String SERVER_ANNOUNCE = "SERVER_ANNOUNCE";
@@ -139,6 +145,8 @@ public class Control extends Thread {
 				return !login(con, receivedMSG);
 			case AUTHENTICATE:
 				return !auth(con, receivedMSG);
+			case AUTHENTICATION_SUCCESS:
+				return !authSuccess(con, receivedMSG);
 			case INVALID_MESSAGE:
 				con.closeCon();
 				return false;
@@ -481,8 +489,37 @@ public class Control extends Thread {
 			con.writeMsg(auth.toJSONString());
 			return false;
 		}
+
+		command = AUTHENTICATION_SUCCESS;
+		auth.put("command", command);
+		auth.put("myhost", Settings.getLocalHostname());
+		auth.put("myport", Settings.getLocalPort());
+		auth.put("parenthost", Settings.getRemoteHostname());
+		auth.put("parentport", Settings.getRemotePort());
+		con.writeMsg(auth.toJSONString());
 		broadConnections.add(con);
 		return true;
+
+	}
+
+	/**
+	 * Process the AUTHENTICATE command from other server
+	 *
+	 * @param con
+	 *            The connection from which the message comes
+	 * @param receivedMSG
+	 *            The received message
+	 * @return True if authenticate success, false otherwise
+	 */
+	@SuppressWarnings("unchecked")
+	private synchronized boolean authSuccess(Connection con, JsonObject receivedMSG) throws NullPointerException {
+		JSONObject json = new JSONObject();
+
+		parentHost = receivedMSG.get("parenthost").getAsString();
+		parentPort = receivedMSG.get("parentport").getAsInt();
+
+		return true;
+
 	}
 
 	/**
