@@ -14,6 +14,9 @@ public class Settings {
 	private static String localHostname = "localhost";
 	private static String remoteHostname = null;
 	private static int remotePort = 3780;
+	private static String backupHostName = null;
+	private static int backupHostPort = 0;
+	private static boolean isOutGoingConnection = false;
 	private static int activityInterval = 5000; // milliseconds
 	private static String secret = null;
 	private static String username = "anonymous";
@@ -49,6 +52,30 @@ public class Settings {
 
 	public static void setRemoteHostname(String remoteHostname) {
 		Settings.remoteHostname = remoteHostname;
+	}
+
+	public static void setBackupHostname (String backupHostname) {
+		Settings.backupHostName = backupHostname;
+	}
+
+	public static String getBackupHostname () {
+		return backupHostName;
+	}
+
+	public static void setBackupHostPort (int backupHostPort) {
+		Settings.backupHostPort = backupHostPort;
+	}
+
+	public static int getBackupHostPort () {
+		return Settings.backupHostPort;
+	}
+
+	public static void setIsOutGoingConnection(boolean isOutGoingConnection) {
+		Settings.isOutGoingConnection = isOutGoingConnection;
+	}
+
+	public static boolean getIsOutGoingConnection() {
+		return Settings.isOutGoingConnection;
 	}
 	
 	public static int getActivityInterval() {
