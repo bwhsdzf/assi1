@@ -21,6 +21,9 @@ public class Protocol {
         LOGIN,
         LOGIN_SUCCESS,
         LOGIN_FAILED,
+        LOGIN_REQUEST,
+        LOGIN_ALLOWED,
+        LOGIN_DENIED,
         LOGOUT,
         REDIRECT,
         ACTIVITY_MESSAGE,
@@ -70,6 +73,27 @@ public class Protocol {
         json.put("username", username);
         json.put("secret", secret);
         return json.toJSONString();
+    }
+    public static String loginRequest(String username, String secret) {
+    	JSONObject json = new JSONObject();
+    	json.put("command", Type.LOGIN_REQUEST.name());
+    	json.put("username", username);
+    	json.put("secret", secret);
+    	return json.toJSONString();
+    }
+    public static String loginAllowed(String username, String secret) {
+    	JSONObject json = new JSONObject();
+    	json.put("command", Type.LOGIN_ALLOWED.name());
+    	json.put("username", username);
+    	json.put("secret", secret);
+    	return json.toJSONString();
+    }
+    public static String loginDenied(String username, String secret) {
+    	JSONObject json = new JSONObject();
+    	json.put("command", Type.LOGIN_DENIED.name());
+    	json.put("username", username);
+    	json.put("secret", secret);
+    	return json.toJSONString();
     }
     public static String loginSuccess(String info){
         JSONObject json = new JSONObject();

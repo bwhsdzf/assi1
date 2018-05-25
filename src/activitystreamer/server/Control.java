@@ -19,7 +19,6 @@ import activitystreamer.util.Protocol;
 
 public class Control extends Thread {
 
-
 	private static final Logger log = LogManager.getLogger();
 
 	private static ServerConnector parentConnection;
@@ -41,6 +40,9 @@ public class Control extends Thread {
 	private static HashMap<String, Integer> registerList1 = new HashMap<>();
 	private static HashMap<String, ServerConnector> registerList2 = new HashMap<>();
 
+	private static HashMap<String, Integer> loginList1 = new HashMap<>();
+	private static HashMap<String, ServerConnector> loginList2 = new HashMap<>();
+
 	private static boolean term = false;
 	private static Listener listener;
 
@@ -54,7 +56,7 @@ public class Control extends Thread {
 
 	private JsonParser parser = new JsonParser();
 
-	//Finalized
+	// Finalized
 	public static Control getInstance() {
 		if (control == null) {
 			control = new Control();
@@ -90,7 +92,7 @@ public class Control extends Thread {
 		start();
 	}
 
-	//Finalized
+	// Finalized
 	public void initiateConnection() {
 		// make a connection to another server if remote hostname is supplied
 		if (Settings.getRemoteHostname() != null) {
@@ -120,66 +122,60 @@ public class Control extends Thread {
 		try {
 			String type = receivedMSG.get("command").getAsString();
 
-			if(type.equals(Protocol.Type.REGISTER.name())) {
+			if (type.equals(Protocol.Type.REGISTER.name())) {
 				System.out.println(type);
 				return !register(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.LOGIN.name())) {
+			} else if (type.equals(Protocol.Type.LOGIN.name())) {
 				System.out.println(type);
 				return !login(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.AUTHENTICATE.name())) {
+			} else if (type.equals(Protocol.Type.AUTHENTICATE.name())) {
 				System.out.println(type);
 				return !auth(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.AUTHENTICATION_SUCCESS.name())) {
+			} else if (type.equals(Protocol.Type.AUTHENTICATION_SUCCESS.name())) {
 				System.out.println(type);
 				return !authSuccess(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.INVALID_MESSAGE.name())) {
+			} else if (type.equals(Protocol.Type.INVALID_MESSAGE.name())) {
 				System.out.println(type);
 				con.closeCon();
 				return false;
-			}
-			else if(type.equals(Protocol.Type.SERVER_ANNOUNCE.name())) {
+			} else if (type.equals(Protocol.Type.SERVER_ANNOUNCE.name())) {
 				System.out.println(type);
 				return !announce(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.LOGOUT.name())) {
+			} else if (type.equals(Protocol.Type.LOGOUT.name())) {
 				System.out.println(type);
 				con.closeCon();
 				return false;
-			}
-			else if(type.equals(Protocol.Type.LOCK_REQUEST.name())) {
+			} else if (type.equals(Protocol.Type.LOCK_REQUEST.name())) {
 				System.out.println(type);
 				return !lockRequest(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.LOCK_DENIED.name())) {
+			} else if (type.equals(Protocol.Type.LOCK_DENIED.name())) {
 				System.out.println(type);
 				return !lockProcess(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.LOCK_ALLOWED.name())) {
+			} else if (type.equals(Protocol.Type.LOCK_ALLOWED.name())) {
 				System.out.println(type);
 				return !lockProcess(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.ACTIVITY_BROADCAST.name())) {
+			} else if (type.equals(Protocol.Type.ACTIVITY_BROADCAST.name())) {
 				System.out.println(type);
 				return !broadcast(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.ACTIVITY_MESSAGE.name())) {
+			} else if (type.equals(Protocol.Type.ACTIVITY_MESSAGE.name())) {
 				System.out.println(type);
 				return !broadcast(con, receivedMSG);
-			}
-			else if(type.equals(Protocol.Type.AUTHTENTICATION_FAIL.name())) {
+			} else if (type.equals(Protocol.Type.AUTHTENTICATION_FAIL.name())) {
 				System.out.println(type);
 				con.closeCon();
 				return false;
-			}
-			else
+			} else if (type.equals(Protocol.Type.LOGIN_REQUEST.name())){
+				return !loginRequest(con,receivedMSG);
+			} else if (type.equals(Protocol.Type.LOGIN_ALLOWED.name())){
+				return !loginProcess(con,receivedMSG);
+			}else if (type.equals(Protocol.Type.LOGIN_DENIED.name())){
+				return !loginProcess(con,receivedMSG);
+			}else
 				return false;
 		} catch (NullPointerException e) {
 			e.printStackTrace();
-			msg = Protocol.invalidMessage("Not enough info in message," + " possibly no authenticated user in ACTIVITY_BROADCAST ?");
+			msg = Protocol.invalidMessage(
+					"Not enough info in message," + " possibly no authenticated user in ACTIVITY_BROADCAST ?");
 			con.writeMsg(msg);
 		}
 		return false;
@@ -205,9 +201,9 @@ public class Control extends Thread {
 			String msg = Protocol.authenticate(Settings.getSecret());
 			con.writeMsg(msg);
 
-		}catch (IOException e) {
-			log.error("failed to make RE-connection to " + Settings.getRemoteHostname() + ":"
-					+ Settings.getRemotePort() + " :" + e);
+		} catch (IOException e) {
+			log.error("failed to make RE-connection to " + Settings.getRemoteHostname() + ":" + Settings.getRemotePort()
+					+ " :" + e);
 			System.exit(-1);
 		}
 		return con;
@@ -314,23 +310,23 @@ public class Control extends Thread {
 		String secret = receivedMSG.get("secret").getAsString();
 
 		// Broadcast message to all other servers except the source
-		for (ServerConnector server : broadConnections) {
-			if (server != con) {
+		if (!registerList1.containsKey(username)) {
+			for (ServerConnector server : broadConnections) {
+				if (server != con) {
 
-				// If this is the server that asked for lock response from other server
-				// for the coming user name, stop broadcasting
-				if (!registerList1.containsKey(username))
+					// If this is the server that asked for lock response from other server
+					// for the coming user name, stop broadcasting
+
 					server.writeMsg(receivedMSG.getAsString());
+				}
 			}
-		}
-
-		if (receivedMSG.get("command").getAsString().equals(Protocol.Type.LOCK_ALLOWED.name())) {
-			if (registerList1.containsKey(username)) {
+		} else {
+			if (receivedMSG.get("command").getAsString().equals(Protocol.Type.LOCK_ALLOWED.name())) {
 				int n = registerList1.get(username) + 1;
 				registerList1.put(username, n);
 				// If the number of allow reaches the number of connected server
 				// send register success
-				if (n == serverInfo.size()) {
+				if (n >= serverInfo.size()) {
 					userInfo.put(username, secret);
 
 					String msg = Protocol.registerSuccess("register successful for  " + username);
@@ -339,12 +335,10 @@ public class Control extends Thread {
 					registerList2.remove(username);
 					return true;
 				}
-			}
 
-		}
-		// If received lock denied, send register failed immediately
-		else if (receivedMSG.get("command").getAsString().equals(Protocol.Type.LOCK_DENIED.name())) {
-			if (registerList1.containsKey(username)) {
+			}
+			// If received lock denied, send register failed immediately
+			else if (receivedMSG.get("command").getAsString().equals(Protocol.Type.LOCK_DENIED.name())) {
 				String msg = Protocol.registerFailed(username + " is already register with the system");
 				registerList2.get(username).writeMsg(msg);
 				registerList1.remove(username);
@@ -353,7 +347,9 @@ public class Control extends Thread {
 					userInfo.remove(username);
 				}
 			}
+
 		}
+
 		return true;
 	}
 
@@ -437,17 +433,16 @@ public class Control extends Thread {
 			// Check for redirect
 			if (!serverInfo.isEmpty()) {
 
-
 				for (JsonObject info : serverInfo.values()) {
 
 					String hostname = info.get("hostname").toString().replaceAll("\"", "");
-					//System.out.print("hostname is " + hostname);
+					// System.out.print("hostname is " + hostname);
 					int load = info.get("load").getAsInt();
 					int port = info.get("port").getAsInt();
 					if (load + 2 < currentLoad) {
 
-						msg = Protocol.redirect(hostname,port);
-						System.out.println("redirecting to " + msg);  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+						msg = Protocol.redirect(hostname, port);
+						System.out.println("redirecting to " + msg);
 						con.writeMsg(msg);
 						con.closeCon();
 						return false;
@@ -455,12 +450,119 @@ public class Control extends Thread {
 				}
 			}
 		}
-		// Else login fail
+		// Else ask for other server about the login info
 		else {
+			loginList1.put(username, 0);
+			loginList2.put(username, con);
+			msg = Protocol.loginRequest(username, secret);
+			for (ServerConnector connection : broadConnections) {
+				connection.writeMsg(msg);
+			}
+		}
+		return true;
+	}
 
-			msg = Protocol.loginFailed("attempt to login with wrong secret");
+	@SuppressWarnings("unchecked")
+	private synchronized boolean loginProcess(ServerConnector con, JsonObject receivedMSG) throws NullPointerException {
+		// Check if the message source is authenticated
+		if (!broadConnections.contains(con)) {
+			String msg = Protocol.invalidMessage("Unanthenticated server");
 			con.writeMsg(msg);
 			return false;
+		}
+		String username = receivedMSG.get("username").getAsString();
+		String secret = receivedMSG.get("secret").getAsString();
+		int currentLoad = loadConnections.size();
+
+		// Broadcast message to all other servers except the source
+		// Or stop if this is the source of login request
+		if (!loginList1.containsKey(username)) {
+			for (ServerConnector server : broadConnections) {
+				if (server != con) {
+					server.writeMsg(receivedMSG.toString());
+				}
+			}
+		} else {
+			if (receivedMSG.get("command").getAsString().equals(Protocol.Type.LOGIN_DENIED.name())) {
+				int n = loginList1.get(username) + 1;
+				loginList1.put(username, n);
+				// If the number of denies reaches the number of connected server
+				// send login fail
+				if (n >= serverInfo.size()) {
+
+					String msg = Protocol.loginFailed("Incorrect user info");
+					loginList2.get(username).writeMsg(msg);
+					loginList1.remove(username);
+					loginList2.remove(username);
+					return true;
+				}
+
+			}
+			// If received any login allowed, send login success immediately and save info
+			// in local database
+			else if (receivedMSG.get("command").getAsString().equals(Protocol.Type.LOGIN_ALLOWED.name())) {
+				String msg = Protocol.loginSuccess("logged in as user " + username);
+				loginList2.get(username).writeMsg(msg);
+				if (!userInfo.containsKey(username)) {
+					userInfo.put(username, secret);
+				}
+				// Check for redirect
+				if (!serverInfo.isEmpty()) {
+
+					for (JsonObject info : serverInfo.values()) {
+						String hostname = info.get("hostname").toString().replaceAll("\"", "");
+						// System.out.print("hostname is " + hostname);
+						int load = info.get("load").getAsInt();
+						int port = info.get("port").getAsInt();
+						if (load + 2 < currentLoad) {
+
+							msg = Protocol.redirect(hostname, port);
+							System.out.println("redirecting to " + msg);
+							loginList2.get(username).writeMsg(msg);
+							loginList2.get(username).closeCon();
+							loginList1.remove(username);
+							loginList2.remove(username);
+							return false;
+						}
+					}
+				}
+				loginList1.remove(username);
+				loginList2.remove(username);
+			}
+		}
+		return true;
+	}
+
+	@SuppressWarnings("unchecked")
+	private synchronized boolean loginRequest(ServerConnector con, JsonObject receivedMSG) throws NullPointerException {
+		if (!broadConnections.contains(con)) {
+			String msg = Protocol.invalidMessage("Unanthenticated server");
+			con.writeMsg(msg);
+			return false;
+		}
+		String username = receivedMSG.get("username").getAsString();
+		String secret = receivedMSG.get("secret").getAsString();
+
+		for (ServerConnector server : broadConnections) {
+			if (server != con) {
+				server.writeMsg(receivedMSG.toString());
+			}
+		}
+
+		// If the info matches the one stored in database, broadcast login allowed
+		if (userInfo.containsKey(username)) {
+			if (userInfo.get(username).equals(secret)) {
+				String msg = Protocol.loginAllowed(username, secret);
+				for (ServerConnector server : broadConnections) {
+					server.writeMsg(msg);
+				}
+				return true;
+			}
+		}
+		// Otherwise return login denied
+		String msg = Protocol.loginDenied(username, secret);
+		for (ServerConnector server : broadConnections) {
+			server.writeMsg(msg);
 		}
 		return true;
 	}
@@ -491,10 +593,12 @@ public class Control extends Thread {
 			con.writeMsg(msg);
 			return false;
 		}
-		if(Settings.getRemoteHostname()==null)
-			msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(), "", Settings.getRemotePort());
+		if (Settings.getRemoteHostname() == null)
+			msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(), "",
+					Settings.getRemotePort());
 		else
-			msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(), Settings.getRemoteHostname(), Settings.getRemotePort());
+			msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
+					Settings.getRemoteHostname(), Settings.getRemotePort());
 
 		con.writeMsg(msg);
 		broadConnections.add(con);
@@ -515,7 +619,8 @@ public class Control extends Thread {
 
 		Settings.setBackupHostname(receivedMSG.get("parenthostname").getAsString());
 		Settings.setBackupHostPort(receivedMSG.get("parentport").getAsInt());
-		System.out.print("Backup Server: " + Settings.getBackupHostname() + " " + Integer.toString(Settings.getBackupHostPort()) + "\n");
+		System.out.print("Backup Server: " + Settings.getBackupHostname() + " "
+				+ Integer.toString(Settings.getBackupHostPort()) + "\n");
 
 		return true;
 
@@ -547,8 +652,7 @@ public class Control extends Thread {
 			}
 			String hostname = receivedMSG.get("hostname").getAsString();
 			serverInfo.put(hostname, receivedMSG);
-		}
-		catch (Exception e){
+		} catch (Exception e) {
 			System.out.println(receivedMSG.toString() + " What the fuck is going on/n");
 		}
 		return true;
@@ -581,7 +685,7 @@ public class Control extends Thread {
 				// Process the activity object
 				JsonObject actObj = receivedMSG.get("activity").getAsJsonObject();
 				actObj.addProperty("authenticated_user", username);
-				String msg = Protocol.activityBroadcast(actObj);  ///////////////////////////////////////////////////////////////
+				String msg = Protocol.activityBroadcast(actObj); ///////////////////////////////////////////////////////////////
 
 				for (ServerConnector connection : connections) {
 					connection.writeMsg(msg);
@@ -593,7 +697,6 @@ public class Control extends Thread {
 				return false;
 			}
 		} else if (receivedMSG.get("command").getAsString().equals(Protocol.Type.ACTIVITY_BROADCAST)) {
-
 
 			JsonObject actObj = receivedMSG.get("activity").getAsJsonObject();
 			actObj.addProperty("authenticated_user", actObj.get("authenticated_user").getAsString());
@@ -611,7 +714,8 @@ public class Control extends Thread {
 
 	@Override
 	public void run() {
-		//log.info("using activity interval of " + Settings.getActivityInterval() + " milliseconds");
+		// log.info("using activity interval of " + Settings.getActivityInterval() + "
+		// milliseconds");
 		while (!term) {
 			// do something with 5 second intervals in between
 			try {
@@ -648,7 +752,8 @@ public class Control extends Thread {
 	@SuppressWarnings("unchecked")
 	public synchronized boolean doActivity() {
 
-		String msg = Protocol.serverAnnounce(id, loadConnections.size(), Settings.getLocalHostname(), Settings.getLocalPort());
+		String msg = Protocol.serverAnnounce(id, loadConnections.size(), Settings.getLocalHostname(),
+				Settings.getLocalPort());
 
 		for (ServerConnector cons : broadConnections) {
 			cons.writeMsg(msg);
