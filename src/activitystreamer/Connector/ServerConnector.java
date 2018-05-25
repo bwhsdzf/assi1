@@ -2,6 +2,7 @@ package activitystreamer.Connector;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.sql.Timestamp;
 
 import activitystreamer.server.Control;
 import activitystreamer.util.Settings;
@@ -53,16 +54,21 @@ public class ServerConnector extends Connector {
         } catch (IOException e) {
 
             if(Settings.getIsOutGoingConnection()) {
+            	Timestamp time = new Timestamp(System.currentTimeMillis());
+            	Control.getInstance().setDisconectTime(time);
                 log.error("connection " + Settings.socketAddress(socket) + " disconnect. Reconnection");
-                Control.getInstance().reconnect(this);
-                try{
-                    Thread.sleep(500);
-                } catch(InterruptedException ee) {
-
+                ServerConnector con = Control.getInstance().reconnect(this);
+                
+                while(con == null) {
+                	try {
+						Thread.sleep(10000);
+						con = Control.getInstance().reconnect(con);
+					} catch (InterruptedException e1) {
+						continue;
+					}
                 }
-
-                this.run();
             }
+
             else{
                 log.error("connection " + Settings.socketAddress(socket) + " closed with exception: " + e);
                 Control.getInstance().connectionClosed(this);

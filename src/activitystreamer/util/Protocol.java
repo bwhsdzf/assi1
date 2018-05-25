@@ -9,6 +9,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 
 import java.awt.*;
+import java.util.ArrayList;
 
 
 public class Protocol {
@@ -34,7 +35,8 @@ public class Protocol {
         REGISTER_FAILED,
         LOCK_REQUEST,
         LOCK_DENIED,
-        LOCK_ALLOWED
+        LOCK_ALLOWED,
+        SEND_ALL_MESSAGE
     }
     public final static String ANONYMOUS_USERNAME = "anonymous";
 
@@ -45,13 +47,16 @@ public class Protocol {
         json.put("info", info);
         return json.toJSONString();
     }
-    public static String authenticate(String secret){
+    public static String authenticate(String secret, boolean isReconnect, long time){
         JSONObject json = new JSONObject();
         json.put("command", Type.AUTHENTICATE.name());
         json.put("secret", secret);
+        json.put("reconnect", isReconnect);
+        json.put("time", time);
         return json.toJSONString();
     }
-    public static String authenticateSuccess(String myHostName, int myPort, String parentHostName, int hostPort){
+    public static String authenticateSuccess(String myHostName, int myPort, String parentHostName, int hostPort,
+    		boolean isReconnect, long time, ArrayList<String> messages){
         System.out.println("Root prepare authenticateSuccess");
         JSONObject json = new JSONObject();
         json.put("command", Type.AUTHENTICATION_SUCCESS.name());
@@ -59,8 +64,20 @@ public class Protocol {
         json.put("myport", myPort);
         json.put("parenthostname", parentHostName);
         json.put("parentport", hostPort);
+        if(isReconnect) {
+        	json.put("isReconnect", true);
+        	json.put("time", time);
+        	json.put("messages", messages);
+        }
         return json.toJSONString();
     }
+    public static String sendAllMessage(ArrayList<String> messages) {
+    	JSONObject json = new JSONObject();
+    	json.put("command", Type.SEND_ALL_MESSAGE.name());
+    	json.put("messages", messages);
+    	return json.toJSONString();
+    }
+    
     public static String authenticateFail(String info){
         JSONObject json = new JSONObject();
         json.put("command", Type.AUTHTENTICATION_FAIL.name());
@@ -127,10 +144,11 @@ public class Protocol {
         json.put("activity", activity);
         return json.toJSONString();
     }
-    public static String activityBroadcast(JsonObject activity){
+    public static String activityBroadcast(JsonObject activity, long time){
         JSONObject json = new JSONObject();
         json.put("command", Type.ACTIVITY_BROADCAST.name());
         json.put("activity", activity);
+        json.put("time", time);
         return json.toJSONString();
     }
     public static String serverAnnounce(String id, int load, String hostname, int port){
