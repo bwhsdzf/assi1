@@ -10,6 +10,7 @@ import com.google.gson.JsonSyntaxException;
 
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 
 public class Protocol {
@@ -51,7 +52,7 @@ public class Protocol {
         JSONObject json = new JSONObject();
         json.put("command", Type.AUTHENTICATE.name());
         json.put("secret", secret);
-        json.put("reconnect", isReconnect);
+        json.put("isReconnect", isReconnect);
         json.put("time", time);
         return json.toJSONString();
     }
@@ -64,8 +65,8 @@ public class Protocol {
         json.put("myport", myPort);
         json.put("parenthostname", parentHostName);
         json.put("parentport", hostPort);
+        json.put("isReconnect", isReconnect);
         if(isReconnect) {
-        	json.put("isReconnect", true);
         	json.put("time", time);
         	json.put("messages", messages);
         }
@@ -151,13 +152,22 @@ public class Protocol {
         json.put("time", time);
         return json.toJSONString();
     }
-    public static String serverAnnounce(String id, int load, String hostname, int port){
+    public static String serverAnnounce(String id, int load, String hostname, int port, 
+    		HashMap<String, String> userInfo){
         JSONObject json = new JSONObject();
         json.put("command", Type.SERVER_ANNOUNCE.name());
         json.put("id", id);
         json.put("load", load);
         json.put("hostname", hostname);
         json.put("port", port);
+		ArrayList<String> userDetail = new ArrayList<String>();
+		for(String username : userInfo.keySet()) {
+			JSONObject user = new JSONObject();
+			user.put("username", username);
+			user.put("secret", userInfo.get(username));
+			userDetail.add(user.toJSONString());
+		}
+        json.put("userInfo", userDetail);
         return json.toJSONString();
     }
     public static String register(String username, int port){

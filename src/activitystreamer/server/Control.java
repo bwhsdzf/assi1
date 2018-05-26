@@ -8,6 +8,7 @@ import java.sql.Timestamp;
 import com.sun.xml.internal.ws.api.config.management.policy.ManagementAssertion;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.json.simple.JSONObject;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -603,7 +604,7 @@ public class Control extends Thread {
 			con.writeMsg(msg);
 			return false;
 		}
-		Timestamp reconnectTime = null;
+		Timestamp reconnectTime = new Timestamp(0);
 		ArrayList<String> messages = null;
 		boolean isReconnect = receivedMSG.get("isReconnect").getAsBoolean();
 		
@@ -631,6 +632,7 @@ public class Control extends Thread {
 					Settings.getRemoteHostname(), Settings.getRemotePort(), isReconnect, reconnectTime.getTime(),
 					messages);
 
+		System.out.println(msg);
 		con.writeMsg(msg);
 		broadConnections.add(con);
 		return true;
@@ -660,7 +662,8 @@ public class Control extends Thread {
 			jArray = receivedMSG.getAsJsonArray("messages");
 			// take the messages in json out
 			for(int i = 0; i < jArray.size(); i ++) {
-				JsonObject message = parser.parse(jArray.get(i).toString()).getAsJsonObject();
+				String messageString = jArray.get(i).toString().replaceAll("\"", "").replaceAll("\\\\", "");
+				JsonObject message = parser.parse(messageString).getAsJsonObject();
 				Timestamp msgTime = new Timestamp(message.get("time").getAsLong());
 				JsonObject actMsg = message.get("message").getAsJsonObject();
 				Message msg = new Message(msgTime, actMsg);
@@ -745,27 +748,38 @@ public class Control extends Thread {
 	 * @return True if process successfully, false otherwise
 	 */
 	private synchronized boolean announce(ServerConnector con, JsonObject receivedMSG) throws NullPointerException {
-		try {
-			if (!broadConnections.contains(con)) {
+
+		if (!broadConnections.contains(con)) {
 				String msg = Protocol.invalidMessage("Unanthenticated server");
 				con.writeMsg(msg);
 				return false;
 			}
-
+		
 			// Broadcast announcement to other servers
 			for (ServerConnector server : broadConnections) {
 				if (con != server) {
 					if (!receivedMSG.isJsonNull())
-						server.writeMsg(receivedMSG.getAsString());
+						server.writeMsg(receivedMSG.toString());
 					else
 						System.out.println("The received MSG is null");
 				}
 			}
 			String hostname = receivedMSG.get("hostname").getAsString();
 			serverInfo.put(hostname, receivedMSG);
-		} catch (Exception e) {
-			System.out.println(receivedMSG.toString() + " What is going on/n");
+			
+		JsonArray jArray = new JsonArray();
+		jArray = receivedMSG.getAsJsonArray("userInfo");
+		// take the messages in json out
+		for(int i = 0; i < jArray.size(); i ++) {
+			String userString = jArray.get(i).toString().replaceAll("\"", "").replaceAll("\\\\", "");
+			//System.out.println(userString);
+			JsonObject user = parser.parse(userString).getAsJsonObject();
+			String username = user.get("username").getAsString();
+			String secret = user.get("secret").getAsString();
+			if(!userInfo.containsKey(username))
+				userInfo.put(username, secret);
 		}
+
 		return true;
 	}
 
@@ -891,9 +905,9 @@ public class Control extends Thread {
 	 * @return
 	 */
 	public synchronized boolean doActivity() {
-
+		
 		String msg = Protocol.serverAnnounce(id, loadConnections.size(), Settings.getLocalHostname(),
-				Settings.getLocalPort());
+				Settings.getLocalPort(),userInfo);
 
 		for (ServerConnector cons : broadConnections) {
 			cons.writeMsg(msg);
