@@ -264,13 +264,13 @@ public class Control extends Thread {
 				else{
 					Settings.setRemoteHostname(broadConnections.get(0).getInComingServerName());
 					Settings.setBackupRootHostPort(broadConnections.get(0).getInComingServerPort());
+					log.info(broadConnections.size()+Settings.getRemoteHostname() + " " + Settings.getRemotePort());
 					String msg = Protocol.setRootBackup();
 					broadConnections.get(0).writeMsg(msg);
-					try{
-					Thread.sleep(500);
-					}catch(Exception e){}
-					msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
-					broadConnections.get(0).writeMsg(msg);
+
+
+					/*msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
+					broadConnections.get(0).writeMsg(msg);*/
 
 					for(int i = 1; i< broadConnections.size(); i++){
 						msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
@@ -301,8 +301,8 @@ public class Control extends Thread {
 			else if(connectorType == ServerConnector.ConnectorType.SERVER_OUT
 					&& this.serverType == ServerType.BACKUP){
 
-				if(Settings.getRemotePort()==Settings.getLocalPort()
-						&& Settings.getRemoteHostname() == Settings.getLocalHostname()){
+		/*		if(Settings.getRemotePort()==Settings.getLocalPort()
+						&& Settings.getRemoteHostname() == Settings.getLocalHostname()){*/
 					Settings.setBackupHostname(null);
 					Settings.setBackupHostPort(0);
 					Settings.setRemoteHostname(null);
@@ -325,10 +325,10 @@ public class Control extends Thread {
 							broadConnections.get(i).writeMsg(msg);
 						}
 					}
-				}
+				/*}
 				else{
 					Socket s = new Socket(Settings.getBackupHostname(), Settings.getBackupHostPort());
-					/*ServerSocket s = new ServerSocket(Settings.getBackupHostname(), Settings.getBackupHostPort());*/
+					*//*ServerSocket s = new ServerSocket(Settings.getBackupHostname(), Settings.getBackupHostPort());*//*
 					ServerConnector c = new ServerConnector(s, true);
 
 					c.setConnectorType(ServerConnector.ConnectorType.SERVER_OUT);
@@ -340,7 +340,7 @@ public class Control extends Thread {
 					c.writeMsg(msg);
 
 					log.debug("This message should appear after get new backup");
-				}
+				}*/
 
 
 			}
@@ -854,7 +854,7 @@ public class Control extends Thread {
 			int backupHostPort = receivedMSG.get("backupHostport").getAsInt();
 			Settings.setBackupHostname(backupHostName);
 			Settings.setBackupHostPort(backupHostPort);
-			log.info("New backup host: " + backupHostName + " " + backupHostPort);
+			log.info("new backup host: " + backupHostName + " " + backupHostPort);
 			return true;
 		}
 		return false;
