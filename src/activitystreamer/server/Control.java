@@ -54,6 +54,13 @@ public class Control extends Thread {
 
 	private JsonParser parser = new JsonParser();
 
+	public enum ServerType{
+		ROOT,
+		BACKUP,
+		NORMAL
+	}
+	private ServerType serverType = ServerType.NORMAL;
+
 	//Finalized
 	public static Control getInstance() {
 		if (control == null) {
@@ -79,7 +86,8 @@ public class Control extends Thread {
 			Settings.setSecret(secret);
 			log.info("Using new secret: " + secret);
 		}
-		// start a listener
+
+		/*// start a listener
 		try {
 			listener = new Listener();
 		} catch (IOException e1) {
@@ -88,12 +96,14 @@ public class Control extends Thread {
 		}
 		// Initiate connection
 		initiateConnection();
-		start();
+		start();*/
+
+		initiateConnection();
 	}
 
 	//Finalized
 	public void initiateConnection() {
-		// make a connection to another server if remote hostname is supplied
+		/*// make a connection to another server if remote hostname is supplied
 		if (Settings.getRemoteHostname() != null) {
 			try {
 				outgoingConnection(new Socket(Settings.getRemoteHostname(), Settings.getRemotePort()));
@@ -102,7 +112,33 @@ public class Control extends Thread {
 						+ Settings.getRemotePort() + " :" + e);
 				System.exit(-1);
 			}
+		}*/
+		try {
+			if(Settings.getRemoteHostname() != null) {
+
+				//Server type set
+				this.serverType = ServerType.NORMAL;
+				//Setting type set
+				listener = new Listener();
+
+				outgoingConnection(new Socket(Settings.getRemoteHostname(), Settings.getRemotePort()));
+			}
+			else{
+				//This is a Root
+				this.serverType = ServerType.ROOT;
+				//Settings setup
+				Settings.setRemoteHostname(Settings.getLocalHostname());
+				Settings.setRemotePort(Settings.getLocalPort());
+
+				listener = new Listener();
+			}
+			start();
+		} catch (IOException e) {
+			log.error("Failed to make connection to " + Settings.getRemoteHostname() + ":"
+					+ Settings.getRemotePort() + " :" + e);
+			System.exit(-1);
 		}
+
 	}
 
 	/*
@@ -180,6 +216,10 @@ public class Control extends Thread {
 				System.out.println(type);
 				return !updateBackup(con,receivedMSG);
 			}
+			else if(type.equals(Protocol.Type.SET_ROOT_BACKUP)) {
+				System.out.println(type);
+				return !setRootBackup();
+			}
 
 			else
 				return false;
@@ -205,6 +245,9 @@ public class Control extends Thread {
 
 	public synchronized ServerConnector reconnect(ServerConnector con) {
 		try {
+
+			ServerConnector.ConnectorType connectorType = con.getConnectorType();
+
 			if (!term)
 				connections.remove(con);
 			if (loadConnections.contains(con))
@@ -212,17 +255,84 @@ public class Control extends Thread {
 			if (broadConnections.contains(con))
 				broadConnections.remove(con);
 
-			Socket s = new Socket(Settings.getBackupHostname(), Settings.getBackupHostPort());
-			/*ServerSocket s = new ServerSocket(Settings.getBackupHostname(), Settings.getBackupHostPort());*/
-			ServerConnector c = new ServerConnector(s, true);
+			if(connectorType == ServerConnector.ConnectorType.SERVER_IN_BACKUP
+					&& this.serverType == ServerType.ROOT){
+				if(broadConnections.size() == 0){
+					Settings.setRemoteHostname(null);
+					Settings.setRemotePort(3780);
+				}
+				else{
+					Settings.setRemoteHostname(broadConnections.get(0).getInComingServerName());
+					Settings.setBackupRootHostPort(broadConnections.get(0).getInComingServerPort());
+					String msg = Protocol.setRootBackup();
+					broadConnections.get(0).writeMsg(msg);
+					for(int i = 1; i< broadConnections.size(); i++){
+						msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
+						broadConnections.get(i).writeMsg(msg);
+					}
+				}
+			}
+			else if(connectorType == ServerConnector.ConnectorType.SERVER_IN_BACKUP
+					&& this.serverType != ServerType.ROOT){
 
-			connections.add(c);
-			broadConnections.add(c);
-			String msg = Protocol.authenticate(Settings.getSecret());
-			c.writeMsg(msg);
+				int tmp = 0;
+				for(int i = 0; i<broadConnections.size(); i++){
+					if(broadConnections.get(i).getConnectorType() != ServerConnector.ConnectorType.SERVER_OUT){
+						String msg = Protocol.setRootBackup();
+						broadConnections.get(i).writeMsg(msg);
+						tmp = i;
+						break;
+					}
+				}
+				for(int i = 0; i<broadConnections.size(); i++){
+					if(broadConnections.get(i).getConnectorType() != ServerConnector.ConnectorType.SERVER_OUT
+							&& tmp != i){
+						String msg = Protocol.setRootBackup();
+						broadConnections.get(i).writeMsg(msg);
+					}
+				}
+			}
+			else if(connectorType == ServerConnector.ConnectorType.SERVER_OUT
+					&& this.serverType == ServerType.BACKUP){
 
-			log.debug("This message should appear after get new backup");
+				Settings.setBackupHostname(null);
+				Settings.setBackupHostPort(0);
+				Settings.setRemoteHostname(null);
+				Settings.setBackupHostPort(3780);
 
+				this.serverType = ServerType.ROOT;
+
+				if(broadConnections.size() != 0){
+					ServerConnector connector = broadConnections.get(0);
+					connector.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_BACKUP);
+
+					String msg = Protocol.setRootBackup();
+					connector.writeMsg(msg);
+
+					for(int i = 1; i<broadConnections.size(); i++){
+						msg = Protocol.updateBackupHost(connector.getInComingServerName(),connector.getInComingServerPort());
+						broadConnections.get(i).writeMsg(msg);
+					}
+				}
+
+			}
+
+			if(connectorType == ServerConnector.ConnectorType.SERVER_OUT
+					&& serverType == ServerType.NORMAL){
+				Socket s = new Socket(Settings.getBackupHostname(), Settings.getBackupHostPort());
+				/*ServerSocket s = new ServerSocket(Settings.getBackupHostname(), Settings.getBackupHostPort());*/
+				ServerConnector c = new ServerConnector(s, true);
+
+				c.setConnectorType(ServerConnector.ConnectorType.SERVER_OUT);
+
+				connections.add(c);
+				broadConnections.add(c);
+
+				String msg = Protocol.authenticate(Settings.getSecret());
+				c.writeMsg(msg);
+
+				log.debug("This message should appear after get new backup");
+			}
 		}catch (IOException e) {
 			log.error("failed to make RE-connection to " + Settings.getRemoteHostname() + ":"
 					+ Settings.getRemotePort() + " :" + e);
@@ -266,6 +376,8 @@ public class Control extends Thread {
 	public synchronized ServerConnector outgoingConnection(Socket s) throws IOException {
 		log.debug("outgoing connection: " + Settings.socketAddress(s));
 		ServerConnector c = new ServerConnector(s, true);
+
+		c.setConnectorType(ServerConnector.ConnectorType.SERVER_OUT);
 		outGoingConnection = c;
 		connections.add(c);
 		broadConnections.add(c);
@@ -509,6 +621,7 @@ public class Control extends Thread {
 	private synchronized boolean auth(ServerConnector con, JsonObject receivedMSG) throws NullPointerException {
 
 		String msg;
+
 		// If already authenticated then reply with invalid message
 		if (broadConnections.contains(con)) {
 			msg = Protocol.invalidMessage("Already authenticated in this server");
@@ -522,12 +635,50 @@ public class Control extends Thread {
 			con.writeMsg(msg);
 			return false;
 		}
-		if(Settings.getRemoteHostname()==null)
-			msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(), "", Settings.getRemotePort());
-		else
-			msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(), Settings.getRemoteHostname(), Settings.getRemotePort());
+
+
+		//Setup connection
+
+		//Root Server case
+		if(this.serverType == ServerType.ROOT){
+			if(broadConnections.size()==0){
+				Settings.setRemoteHostname(receivedMSG.get("hostname").getAsString());
+				Settings.setRemotePort(receivedMSG.get("hostport").getAsInt());
+				con.setInComingServerName(receivedMSG.get("hostname").getAsString());
+				con.setInComingServerPort(receivedMSG.get("hostport").getAsInt());
+				con.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_BACKUP);
+
+				log.info("Root Server set root backup connection: "
+						+ Settings.getRemoteHostname() + " " + Settings.getRemotePort());
+
+				msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
+						Settings.getRemoteHostname(), Settings.getRemotePort(), true);
+			}
+			else{
+				msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
+						Settings.getRemoteHostname(), Settings.getRemotePort(), false);
+			}
+		}
+		else{
+			if(broadConnections.size()==1){
+				con.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_BACKUP);
+
+				msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
+						Settings.getRemoteHostname(), Settings.getRemotePort(), true);
+			}
+			else{
+				con.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_NORMAL);
+				msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
+						Settings.getRemoteHostname(), Settings.getRemotePort(), false);
+			}
+		}
+
+		con.setInComingServerName(receivedMSG.get("hostname").getAsString());
+		con.setInComingServerPort(receivedMSG.get("hostport").getAsInt());
+
 
 		con.writeMsg(msg);
+
 		broadConnections.add(con);
 		return true;
 	}
@@ -548,8 +699,13 @@ public class Control extends Thread {
 		Settings.setBackupHostPort(receivedMSG.get("remotehostport").getAsInt());
 		Settings.setRemoteHostname(receivedMSG.get("hostname").getAsString());
 		Settings.setRemotePort(receivedMSG.get("hostport").getAsInt());
-		System.out.print("Backup Server: " + Settings.getBackupHostname() + " " + Integer.toString(Settings.getBackupHostPort()) + "\n");
+		if(receivedMSG.get("isbackuproot").getAsBoolean())
+			this.serverType = ServerType.BACKUP;
+		else
+			this.serverType = ServerType.NORMAL;
 
+		log.info("Backup Server: " + Settings.getBackupHostname() + " " + Integer.toString(Settings.getBackupHostPort()) + "\n");
+		log.info("This server is a : " + this.serverType);
 
 		//Update backup server for my node servers
 		String msg;
@@ -724,12 +880,27 @@ public class Control extends Thread {
 		return false;
 	}
 
+	public synchronized boolean setRootBackup(){
+		this.serverType = ServerType.BACKUP;
+		return true;
+	}
+
+
+
+
 	public final void setTerm(boolean t) {
 		term = t;
 	}
 
 	public final ArrayList<ServerConnector> getConnections() {
 		return connections;
+	}
+
+	public void setServerType(ServerType serverType){
+		this.serverType = serverType;
+	}
+	public ServerType getServerType(){
+		return this.serverType;
 	}
 
 }

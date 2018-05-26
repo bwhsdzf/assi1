@@ -1,5 +1,6 @@
 package activitystreamer.util;
 
+import activitystreamer.server.Control;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
@@ -32,7 +33,8 @@ public class Protocol {
         LOCK_REQUEST,
         LOCK_DENIED,
         LOCK_ALLOWED,
-        UPDATE_BACKUP
+        UPDATE_BACKUP,
+        SET_ROOT_BACKUP
     }
     public final static String ANONYMOUS_USERNAME = "anonymous";
 
@@ -47,9 +49,12 @@ public class Protocol {
         JSONObject json = new JSONObject();
         json.put("command", Type.AUTHENTICATE.name());
         json.put("secret", secret);
+        json.put("hostname", Settings.getLocalHostname());
+        json.put("hostport", Settings.getLocalPort());
         return json.toJSONString();
     }
-    public static String authenticateSuccess(String hostName, int hostPort, String remoteHostName, int remoteHostPort){
+    public static String authenticateSuccess(String hostName, int hostPort, String remoteHostName,
+                                             int remoteHostPort, boolean isBackupRoot){
         System.out.println("Root prepare authenticateSuccess");
         JSONObject json = new JSONObject();
         json.put("command", Type.AUTHENTICATION_SUCCESS.name());
@@ -57,6 +62,7 @@ public class Protocol {
         json.put("hostport", hostPort);
         json.put("remotehostname", remoteHostName);
         json.put("remotehostport", remoteHostPort);
+        json.put("isbackuproot", isBackupRoot);
         return json.toJSONString();
     }
     public static String authenticateFail(String info){
@@ -166,6 +172,11 @@ public class Protocol {
         json.put("command", Type.UPDATE_BACKUP.name());
         json.put("backuphostname", backupHostname);
         json.put("backupHostport", backupHostport);
+        return json.toJSONString();
+    }
+    public static String setRootBackup(){
+        JSONObject json = new JSONObject();
+        json.put("command", Type.SET_ROOT_BACKUP.name());
         return json.toJSONString();
     }
 
