@@ -21,9 +21,16 @@ public class ClientConnector extends Connector{
     public ClientConnector(Socket socket) throws IOException {
 
         super(socket);
-
         userName = null;
         secret = null;
+        start();
+    }
+
+    public ClientConnector(Socket socket, String userName, String secret) throws IOException {
+
+        super(socket);
+        this.userName = userName;
+        this.secret = secret;
         start();
     }
 

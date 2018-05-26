@@ -5,7 +5,9 @@ import java.net.Socket;
 import java.util.*;
 import java.sql.Timestamp;
 
-import com.sun.xml.internal.ws.api.config.management.policy.ManagementAssertion;
+
+import activitystreamer.Connector.*;
+import activitystreamer.Server;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.simple.JSONObject;
@@ -15,18 +17,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 
-import activitystreamer.Connector.ServerConnector;
-import activitystreamer.Connector.ClientConnector;
-import activitystreamer.util.Settings;
-import activitystreamer.util.Message;
-import activitystreamer.util.Protocol;
+import activitystreamer.util.*;
 
 public class Control extends Thread {
 
 	private static final Logger log = LogManager.getLogger();
 
-	private static ServerConnector parentConnection;
-	private static ArrayList<ServerConnector> childConnections;
+	private static ServerConnector outGoingConnection;
+	private static ArrayList<ServerConnector> serverInConnections;
 	private static ArrayList<ClientConnector> clientConnections;
 
 	private static ArrayList<ServerConnector> connections;
@@ -77,11 +75,12 @@ public class Control extends Thread {
 	}
 
 	public Control() {
-		// initialize the connections arrays
-		parentConnection = null;
-		childConnections = new ArrayList<>();
+		// NEW CONNECTION STORAGE
+		outGoingConnection = null;
+		serverInConnections = new ArrayList<>();
 		clientConnections = new ArrayList<>();
 
+		//NEED REMOVING FINALLY
 		connections = new ArrayList<>();
 		loadConnections = new ArrayList<>();
 		broadConnections = new ArrayList<>();
@@ -111,7 +110,7 @@ public class Control extends Thread {
 			try {
 				outgoingConnection(new Socket(Settings.getRemoteHostname(), Settings.getRemotePort()));
 			} catch (IOException e) {
-				log.error("failed to make connection to " + Settings.getRemoteHostname() + ":"
+				log.error("Failed to make connection to " + Settings.getRemoteHostname() + ":"
 						+ Settings.getRemotePort() + " :" + e);
 				System.exit(-1);
 			}
@@ -184,7 +183,10 @@ public class Control extends Thread {
 				return !loginProcess(con, receivedMSG);
 			}else if (type.equals(Protocol.Type.SEND_ALL_MESSAGE.name())) {
 				return !sendAllMessage(con, receivedMSG);
-			} else
+			}else if(type.equals(Protocol.Type.UPDATE_BACKUP.name())){
+				System.out.println(type);
+				return !updateBackup(con,receivedMSG);
+			}else
 				return false;
 		} catch (NullPointerException e) {
 			e.printStackTrace();
@@ -209,16 +211,25 @@ public class Control extends Thread {
 
 	public synchronized ServerConnector reconnect(ServerConnector con) {
 		try {
+			if (!term)
+				connections.remove(con);
+			if (loadConnections.contains(con))
+				loadConnections.remove(con);
+			if (broadConnections.contains(con))
+				broadConnections.remove(con);
+
 			Socket s = new Socket(Settings.getBackupHostname(), Settings.getBackupHostPort());
-			ServerConnector server = new ServerConnector(s, true);
-			connections.remove(con);
-			broadConnections.remove(con);
-			broadConnections.add(server);
+			/*ServerSocket s = new ServerSocket(Settings.getBackupHostname(), Settings.getBackupHostPort());*/
+			ServerConnector c = new ServerConnector(s, true);
+
+			connections.add(c);
+			broadConnections.add(c);
 			String msg = Protocol.authenticate(Settings.getSecret(), true, disconnectTime.getTime());
-			server.writeMsg(msg);
-			return server;
-			// TO-DO
-			// Need to save the connect time for later comparison
+			c.writeMsg(msg);
+
+			log.debug("This message should appear after get new backup");
+			return c;
+			
 
 		} catch (IOException e) {
 			log.error("failed to make RE-connection to " + Settings.getRemoteHostname() + ":" + Settings.getRemotePort()
@@ -236,9 +247,22 @@ public class Control extends Thread {
 	public synchronized ServerConnector incomingConnection(Socket s) throws IOException {
 		log.debug("incomming connection: " + Settings.socketAddress(s));
 		ServerConnector c = new ServerConnector(s, false);
+
+
 		if (c != null)
 			connections.add(c);
 		return c;
+		/*log.debug("incomming connection: " + Settings.socketAddress(s));
+
+		if(s instanceof ServerSocket){
+			ServerConnector sc = new ServerConnector((ServerSocket)s, false);
+			serverInConnections.add(sc);
+		}
+		else{
+			ClientConnector cc = new ClientConnector(s);
+			clientConnections.add(cc);
+		}
+		return null;*/
 
 	}
 
@@ -249,7 +273,7 @@ public class Control extends Thread {
 	public synchronized ServerConnector outgoingConnection(Socket s) throws IOException {
 		log.debug("outgoing connection: " + Settings.socketAddress(s));
 		ServerConnector c = new ServerConnector(s, true);
-		parentConnection = c;
+		outGoingConnection = c;
 		connections.add(c);
 		broadConnections.add(c);
 
@@ -263,7 +287,7 @@ public class Control extends Thread {
 	/**
 	 * Process the register command from client Will first look into local database,
 	 * then send lock request to other server.
-	 * 
+	 *
 	 * @param con
 	 * @param receivedMSG
 	 * @return True if register successful, false otherwise
@@ -310,7 +334,7 @@ public class Control extends Thread {
 	 * Handles the lock_allowed and lock_denied from other server If received
 	 * lock_allowed, increment the counter of the user name by 1 If received
 	 * lock_denied, send register fail right away to the user connection
-	 * 
+	 *
 	 * @param con
 	 * @param receivedMSG
 	 * @return True if register successful, false otherwise
@@ -372,7 +396,7 @@ public class Control extends Thread {
 	/**
 	 * Process the lock request sent from other server Check local database and
 	 * return the response to connection
-	 * 
+	 *
 	 * @param con
 	 * @param receivedMSG
 	 * @return True if the message source is authenticated, false otherwise
@@ -415,7 +439,7 @@ public class Control extends Thread {
 
 	/**
 	 * Process the LOGIN command from client
-	 * 
+	 *
 	 * @param con
 	 *            The connection from which the message is sent
 	 * @param receivedMSG
@@ -581,7 +605,7 @@ public class Control extends Thread {
 
 	/**
 	 * Process the AUTHENTICATE command from other server
-	 * 
+	 *
 	 * @param con
 	 *            The connection from which the message comes
 	 * @param receivedMSG
@@ -649,10 +673,13 @@ public class Control extends Thread {
 	 */
 	private synchronized boolean authSuccess(ServerConnector con, JsonObject receivedMSG) throws NullPointerException {
 
-		Settings.setBackupHostname(receivedMSG.get("parenthostname").getAsString());
-		Settings.setBackupHostPort(receivedMSG.get("parentport").getAsInt());
-		System.out.print("Backup Server: " + Settings.getBackupHostname() + " "
-				+ Integer.toString(Settings.getBackupHostPort()) + "\n");
+		
+		Settings.setBackupHostname(receivedMSG.get("remotehostname").getAsString());
+		Settings.setBackupHostPort(receivedMSG.get("remotehostport").getAsInt());
+		Settings.setRemoteHostname(receivedMSG.get("hostname").getAsString());
+		Settings.setRemotePort(receivedMSG.get("hostport").getAsInt());
+		System.out.print("Backup Server: " + Settings.getBackupHostname() + " " + Integer.toString(Settings.getBackupHostPort()) + "\n");
+
 
 		// If the message is about authenticate reconnection, read the lost messages, store them and
 		// re broadcast, then send messages that has not been broadcast to the other message
@@ -700,7 +727,17 @@ public class Control extends Thread {
 			String msg = Protocol.sendAllMessage(messages);
 			con.writeMsg(msg);
 		}
-		
+		//Update backup server for my node servers
+		String msg;
+		log.info("Number of server connected: " + broadConnections.size());
+		for(ServerConnector connector : broadConnections){
+
+			if(!con.equals(connector)){
+				log.info("Rest server connection: " + connector);
+				msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
+				connector.writeMsg(msg);
+			}
+		}
 		return true;
 
 	}
@@ -742,7 +779,7 @@ public class Control extends Thread {
 
 	/**
 	 * Process the coming server announce message, update local info
-	 * 
+	 *
 	 * @param con
 	 * @param receivedMSG
 	 * @return True if process successfully, false otherwise
@@ -784,8 +821,13 @@ public class Control extends Thread {
 	}
 
 	/**
+<<<<<<< HEAD
 	 * Process the broadcast message from other servers
 	 * 
+=======
+	 * Process the broadcast message from other servers Update their server info
+	 *
+>>>>>>> kageRedirectV1
 	 * @param con
 	 * @param receivedMSG
 	 * @return True if the message source is authenticated, false otherwise
@@ -867,6 +909,26 @@ public class Control extends Thread {
 		}
 	}
 
+	@SuppressWarnings("unchecked")
+	private synchronized boolean updateBackup(ServerConnector con, JsonObject receivedMSG) throws NullPointerException {
+		if (!broadConnections.contains(con)) {
+			String msg = Protocol.invalidMessage("Unanthenticated connection");
+			con.writeMsg(msg);
+			return false;
+		}
+
+		if (receivedMSG.get("command").getAsString().equals(Protocol.Type.UPDATE_BACKUP.name())) {
+			String backupHostName = receivedMSG.get("backuphostname").getAsString();
+			int backupHostPort = receivedMSG.get("backupHostport").getAsInt();
+			Settings.setBackupHostname(backupHostName);
+			Settings.setBackupHostPort(backupHostPort);
+			log.info("New backup host: " + backupHostName + " " + backupHostPort);
+			return true;
+		}
+		return false;
+
+	}
+
 	@Override
 	public void run() {
 		// log.info("using activity interval of " + Settings.getActivityInterval() + "
@@ -901,7 +963,7 @@ public class Control extends Thread {
 
 	/**
 	 * Broadcast the server states to other server
-	 * 
+	 *
 	 * @return
 	 */
 	public synchronized boolean doActivity() {

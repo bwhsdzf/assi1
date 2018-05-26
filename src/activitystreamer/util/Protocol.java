@@ -37,7 +37,8 @@ public class Protocol {
         LOCK_REQUEST,
         LOCK_DENIED,
         LOCK_ALLOWED,
-        SEND_ALL_MESSAGE
+        SEND_ALL_MESSAGE,
+        UPDATE_BACKUP
     }
     public final static String ANONYMOUS_USERNAME = "anonymous";
 
@@ -56,15 +57,15 @@ public class Protocol {
         json.put("time", time);
         return json.toJSONString();
     }
-    public static String authenticateSuccess(String myHostName, int myPort, String parentHostName, int hostPort,
+    public static String authenticateSuccess(String hostName, int hostPort, String remoteHostName, int remoteHostPort,
     		boolean isReconnect, long time, ArrayList<String> messages){
         System.out.println("Root prepare authenticateSuccess");
         JSONObject json = new JSONObject();
         json.put("command", Type.AUTHENTICATION_SUCCESS.name());
-        json.put("myhostname", myHostName);
-        json.put("myport", myPort);
-        json.put("parenthostname", parentHostName);
-        json.put("parentport", hostPort);
+        json.put("hostname", hostName);
+        json.put("hostport", hostPort);
+        json.put("remotehostname", remoteHostName);
+        json.put("remotehostport", remoteHostPort);
         json.put("isReconnect", isReconnect);
         if(isReconnect) {
         	json.put("time", time);
@@ -208,6 +209,15 @@ public class Protocol {
         json.put("command", Type.LOCK_ALLOWED.name());
         json.put("username", username);
         json.put("secret", secret);
+        return json.toJSONString();
+    }
+
+    //Update backup host for child node after I reconnect.
+    public static String updateBackupHost(String backupHostname, int backupHostport){
+        JSONObject json = new JSONObject();
+        json.put("command", Type.UPDATE_BACKUP.name());
+        json.put("backuphostname", backupHostname);
+        json.put("backupHostport", backupHostport);
         return json.toJSONString();
     }
 
