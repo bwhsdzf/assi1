@@ -180,6 +180,16 @@ public class Control extends Thread {
 			}
 			else if(type.equals(Protocol.Type.SERVER_ANNOUNCE.name())) {
 				System.out.println(type);
+				////////////////////////////////////
+				log.info("This server backup: " + Settings.getBackupHostname()+":"+Settings.getBackupHostPort());
+				log.info("This Server Remote: "+Settings.getRemoteHostname()+":"+Settings.getRemotePort());
+				log.info("This server Local: "+Settings.getLocalHostname()+":"+Settings.getLocalPort());
+				log.info("This Server Type: "+ this.serverType);
+				log.info("This connector info: "+con.getConnectorType()+", "+con.getInComingServerName()+":"+con.getInComingServerPort());
+
+
+
+
 				return !announce(con, receivedMSG);
 			}
 			else if(type.equals(Protocol.Type.LOGOUT.name())) {
@@ -216,7 +226,7 @@ public class Control extends Thread {
 				System.out.println(type);
 				return !updateBackup(con,receivedMSG);
 			}
-			else if(type.equals(Protocol.Type.SET_ROOT_BACKUP)) {
+			else if(type.equals(Protocol.Type.SET_ROOT_BACKUP.name())) {
 				System.out.println(type);
 				return !setRootBackup();
 			}
@@ -263,14 +273,15 @@ public class Control extends Thread {
 				}
 				else{
 					Settings.setRemoteHostname(broadConnections.get(0).getInComingServerName());
-					Settings.setBackupRootHostPort(broadConnections.get(0).getInComingServerPort());
-					log.info(broadConnections.size()+Settings.getRemoteHostname() + " " + Settings.getRemotePort());
+					Settings.setRemotePort(broadConnections.get(0).getInComingServerPort());
+					log.info("The side of broadconnection is :"+broadConnections.size());
+					log.info("Server update remove to after backup disconnected: "+Settings.getRemoteHostname() + ":" + Settings.getRemotePort());
 					String msg = Protocol.setRootBackup();
 					broadConnections.get(0).writeMsg(msg);
 
+					msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
+                    broadConnections.get(0).writeMsg(msg);
 
-					/*msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
-					broadConnections.get(0).writeMsg(msg);*/
 
 					for(int i = 1; i< broadConnections.size(); i++){
 						msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());

@@ -16,26 +16,12 @@ public class Settings {
 	private static int remotePort = 3780;
 	private static String backupHostName = null;
 	private static int backupHostPort = 0;
-	private static String backupRootHostName = null;
-	private static int backupRootHostPort = 0;
 
 	/*private static boolean isOutGoingConnection = false;*/
 	private static int activityInterval = 5000; // milliseconds
 	private static String secret = null;
 	private static String username = "anonymous";
 
-	public static void setBackupRootHostName(String backupRootHostName) {
-		Settings.backupRootHostName = backupRootHostName;
-	}
-	public static String getBackupRootHostName(){
-		return backupRootHostName;
-	}
-	public static void setBackupRootHostPort(int backupRootHostPort){
-		Settings.backupRootHostPort = backupRootHostPort;
-	}
-	public static int getBackupRootHostPort(){
-		return backupRootHostPort;
-	}
 
 	public static int getLocalPort() {
 		return localPort;
