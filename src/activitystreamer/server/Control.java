@@ -266,6 +266,12 @@ public class Control extends Thread {
 					Settings.setBackupRootHostPort(broadConnections.get(0).getInComingServerPort());
 					String msg = Protocol.setRootBackup();
 					broadConnections.get(0).writeMsg(msg);
+					try{
+					Thread.sleep(500);
+					}catch(Exception e){}
+					msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
+					broadConnections.get(0).writeMsg(msg);
+
 					for(int i = 1; i< broadConnections.size(); i++){
 						msg = Protocol.updateBackupHost(Settings.getRemoteHostname(),Settings.getRemotePort());
 						broadConnections.get(i).writeMsg(msg);
@@ -295,25 +301,47 @@ public class Control extends Thread {
 			else if(connectorType == ServerConnector.ConnectorType.SERVER_OUT
 					&& this.serverType == ServerType.BACKUP){
 
-				Settings.setBackupHostname(null);
-				Settings.setBackupHostPort(0);
-				Settings.setRemoteHostname(null);
-				Settings.setBackupHostPort(3780);
+				if(Settings.getRemotePort()==Settings.getLocalPort()
+						&& Settings.getRemoteHostname() == Settings.getLocalHostname()){
+					Settings.setBackupHostname(null);
+					Settings.setBackupHostPort(0);
+					Settings.setRemoteHostname(null);
+					Settings.setBackupHostPort(3780);
 
-				this.serverType = ServerType.ROOT;
+					this.serverType = ServerType.ROOT;
 
-				if(broadConnections.size() != 0){
-					ServerConnector connector = broadConnections.get(0);
-					connector.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_BACKUP);
+					if(broadConnections.size() != 0){
+						ServerConnector connector = broadConnections.get(0);
+						connector.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_BACKUP);
 
-					String msg = Protocol.setRootBackup();
-					connector.writeMsg(msg);
+						Settings.setRemoteHostname(connector.getInComingServerName());
+						Settings.setRemotePort(connector.getInComingServerPort());
 
-					for(int i = 1; i<broadConnections.size(); i++){
-						msg = Protocol.updateBackupHost(connector.getInComingServerName(),connector.getInComingServerPort());
-						broadConnections.get(i).writeMsg(msg);
+						String msg = Protocol.setRootBackup();
+						connector.writeMsg(msg);
+
+						for(int i = 1; i<broadConnections.size(); i++){
+							msg = Protocol.updateBackupHost(connector.getInComingServerName(),connector.getInComingServerPort());
+							broadConnections.get(i).writeMsg(msg);
+						}
 					}
 				}
+				else{
+					Socket s = new Socket(Settings.getBackupHostname(), Settings.getBackupHostPort());
+					/*ServerSocket s = new ServerSocket(Settings.getBackupHostname(), Settings.getBackupHostPort());*/
+					ServerConnector c = new ServerConnector(s, true);
+
+					c.setConnectorType(ServerConnector.ConnectorType.SERVER_OUT);
+
+					connections.add(c);
+					broadConnections.add(c);
+
+					String msg = Protocol.authenticate(Settings.getSecret());
+					c.writeMsg(msg);
+
+					log.debug("This message should appear after get new backup");
+				}
+
 
 			}
 
@@ -882,6 +910,8 @@ public class Control extends Thread {
 
 	public synchronized boolean setRootBackup(){
 		this.serverType = ServerType.BACKUP;
+
+
 		return true;
 	}
 
