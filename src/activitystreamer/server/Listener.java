@@ -17,6 +17,7 @@ public class Listener extends Thread{
 	
 	public Listener() throws IOException{
 		portNum = Settings.getLocalPort(); // keep our own copy in case it changes later
+		log.debug("In Coming Address: " + portNum);
 		serverSocket = new ServerSocket(portNum);
 		start();
 	}
@@ -24,13 +25,11 @@ public class Listener extends Thread{
 	@Override
 	public void run() {
 		System.out.println("Listener Started.");
-		log.info("listening for new connections on " + portNum);
 		while(!term){
 			Socket clientSocket;
 			try {
 				clientSocket = serverSocket.accept();
 				Control.getInstance().incomingConnection(clientSocket);
-				System.out.println("In Coming Connection setup.");
 			} catch (IOException e) {
 				log.info("received exception, shutting down");
 				term=true;

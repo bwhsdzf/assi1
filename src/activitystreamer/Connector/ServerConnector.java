@@ -2,12 +2,15 @@ package activitystreamer.Connector;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.time.Duration;
+import java.time.Instant;
 
 import activitystreamer.server.Control;
 import activitystreamer.util.Settings;
 
 public class ServerConnector extends Connector {
 
+    private boolean isOutGoingConnection;
     //Record the login state of the client connection
     //
     // Can remove after modify
@@ -16,11 +19,26 @@ public class ServerConnector extends Connector {
 
     public ServerConnector(Socket socket, boolean isOutGoingConnection) throws IOException {
         super(socket);
-        Settings.setIsOutGoingConnection(isOutGoingConnection);
+        this.isOutGoingConnection = isOutGoingConnection;
         //NEED to DELETING
         username = null;
         secret = null;
     }
+ /*   public ServerConnector(ServerSocket serverSocket, boolean isOutGoingConnection) throws IOException {
+        super(serverSocket);
+        this.isOutGoingConnection = isOutGoingConnection;
+        //NEED to DELETING
+        username = null;
+        secret = null;
+    }*/
+
+    public void setIsOutGoingConnection(boolean isOutGoingConnection){
+        this.isOutGoingConnection = isOutGoingConnection;
+    }
+    public boolean getIsOutGoingConnection(){
+        return this.isOutGoingConnection;
+    }
+
 
     //Can remove
     public void setUsername(String username) {
@@ -52,16 +70,9 @@ public class ServerConnector extends Connector {
             in.close();
         } catch (IOException e) {
 
-            if(Settings.getIsOutGoingConnection()) {
+            if(isOutGoingConnection) {
                 log.error("connection " + Settings.socketAddress(socket) + " disconnect. Reconnection");
                 Control.getInstance().reconnect(this);
-                try{
-                    Thread.sleep(500);
-                } catch(InterruptedException ee) {
-
-                }
-
-                this.run();
             }
             else{
                 log.error("connection " + Settings.socketAddress(socket) + " closed with exception: " + e);

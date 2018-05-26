@@ -125,7 +125,6 @@ public class ClientSkeleton extends Thread {
 
 	// Process all incoming message from server
 	public void run() {
-		// System.out.println(serverSocket.getInetAddress());
 		try {
 			JSONObject json;
 			String data;

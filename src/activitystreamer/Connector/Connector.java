@@ -15,7 +15,7 @@ import activitystreamer.util.Settings;
 
 import javax.swing.plaf.basic.BasicInternalFrameTitlePane;
 
-public abstract class Connector extends Thread{
+public class Connector extends Thread{
 
     protected static final Logger log = LogManager.getLogger();
 
@@ -28,7 +28,7 @@ public abstract class Connector extends Thread{
     protected boolean open;
     protected boolean term;
 
-    protected Connector(Socket socket) throws IOException {
+    public Connector(Socket socket) throws IOException {
 
         in = new DataInputStream(socket.getInputStream());
         out = new DataOutputStream(socket.getOutputStream());
@@ -40,6 +40,10 @@ public abstract class Connector extends Thread{
         term = false;
 
         start();
+    }
+
+    public Socket getSocket(){
+        return this.socket;
     }
 
     public boolean writeMsg(String msg) {
