@@ -301,8 +301,8 @@ public class Control extends Thread {
 			else if(connectorType == ServerConnector.ConnectorType.SERVER_OUT
 					&& this.serverType == ServerType.BACKUP){
 
-		/*		if(Settings.getRemotePort()==Settings.getLocalPort()
-						&& Settings.getRemoteHostname() == Settings.getLocalHostname()){*/
+				if(Settings.getBackupHostPort() == Settings.getLocalPort()
+						&& Settings.getBackupHostname().equals(Settings.getLocalHostname())){
 					Settings.setBackupHostname(null);
 					Settings.setBackupHostPort(0);
 					Settings.setRemoteHostname(null);
@@ -325,10 +325,10 @@ public class Control extends Thread {
 							broadConnections.get(i).writeMsg(msg);
 						}
 					}
-				/*}
+				}
 				else{
 					Socket s = new Socket(Settings.getBackupHostname(), Settings.getBackupHostPort());
-					*//*ServerSocket s = new ServerSocket(Settings.getBackupHostname(), Settings.getBackupHostPort());*//*
+
 					ServerConnector c = new ServerConnector(s, true);
 
 					c.setConnectorType(ServerConnector.ConnectorType.SERVER_OUT);
@@ -340,7 +340,7 @@ public class Control extends Thread {
 					c.writeMsg(msg);
 
 					log.debug("This message should appear after get new backup");
-				}*/
+				}
 
 
 			}
@@ -672,25 +672,24 @@ public class Control extends Thread {
 			if(broadConnections.size()==0){
 				Settings.setRemoteHostname(receivedMSG.get("hostname").getAsString());
 				Settings.setRemotePort(receivedMSG.get("hostport").getAsInt());
-				con.setInComingServerName(receivedMSG.get("hostname").getAsString());
-				con.setInComingServerPort(receivedMSG.get("hostport").getAsInt());
 				con.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_BACKUP);
-
-				log.info("Root Server set root backup connection: "
-						+ Settings.getRemoteHostname() + " " + Settings.getRemotePort());
 
 				msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
 						Settings.getRemoteHostname(), Settings.getRemotePort(), true);
 			}
 			else{
+
+				con.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_NORMAL);
 				msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
 						Settings.getRemoteHostname(), Settings.getRemotePort(), false);
 			}
+
+			log.info("Root Server backup: "
+					+ Settings.getRemoteHostname() + " " + Settings.getRemotePort());
 		}
 		else{
 			if(broadConnections.size()==1){
 				con.setConnectorType(ServerConnector.ConnectorType.SERVER_IN_BACKUP);
-
 				msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
 						Settings.getRemoteHostname(), Settings.getRemotePort(), true);
 			}
@@ -699,6 +698,8 @@ public class Control extends Thread {
 				msg = Protocol.authenticateSuccess(Settings.getLocalHostname(), Settings.getLocalPort(),
 						Settings.getRemoteHostname(), Settings.getRemotePort(), false);
 			}
+			log.info("NON-Root Server backup: "
+					+ Settings.getRemoteHostname() + " " + Settings.getRemotePort());
 		}
 
 		con.setInComingServerName(receivedMSG.get("hostname").getAsString());
@@ -909,6 +910,7 @@ public class Control extends Thread {
 	}
 
 	public synchronized boolean setRootBackup(){
+		log.info("This server is set to BACKUP");
 		this.serverType = ServerType.BACKUP;
 
 
